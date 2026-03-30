@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ Thống Đếm Bao - Quản Lý Đơn Hàng</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="all.min.css">
+</head>
+<body>
+  <!-- Header -->
+  <div class="app-header">
+    <div class="header-content">
+      <h1><i class="fas fa-conveyor-belt"></i> HỆ THỐNG ĐẾM BAO</h1>
+      <div class="conveyor-info">
+        <span class="conveyor-label">BĂNG TẢI:</span>
+        <span class="conveyor-id conveyor-name" id="conveyorId">BT-001</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="main-container">
+    <!-- Device Status Indicator -->
+    <div class="device-status-indicator online" id="deviceStatusIndicator">
+      <span class="status-text">Thiết bị đã kết nối</span>
+    </div>
+    
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+      <button class="tab-btn active" data-tab="overview" onclick="showTab('overview')">
+        <i class="fas fa-tachometer-alt"></i>
+        <span>Tổng quan</span>
+      </button>
+      <button class="tab-btn" data-tab="history" onclick="showTab('history')">
+        <i class="fas fa-history"></i>
+        <span>Lịch sử đếm</span>
+      </button>
+      <button class="tab-btn" data-tab="order" onclick="showTab('order')">
+        <i class="fas fa-plus-circle"></i>
+        <span>Thêm đơn hàng</span>
+      </button>
+      <button class="tab-btn" data-tab="product" onclick="showTab('product')">
+        <i class="fas fa-box"></i>
+        <span>Cài đặt SP</span>
+      </button>
+      <button class="tab-btn" data-tab="wifi" onclick="showTab('wifi')">
+        <i class="fas fa-wifi"></i>
+        <span>Cấu hình WiFi</span>
+      </button>
+      <button class="tab-btn" data-tab="settings" onclick="showTab('settings')">
+        <i class="fas fa-cog"></i>
+        <span>Cài đặt chung</span>
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Tổng quan Tab -->
+      <div class="tab-pane active" id="overview">
+        <div class="overview-section">
+          <!-- Order Info Section -->
+          <div class="order-info-section">
+            <div class="section-header">
+              <h3><i class="fas fa-info-circle"></i> Thông tin đơn hàng</h3>
+              <button class="add-order-btn" onclick="showTab('order')">
+                <i class="fas fa-plus"></i> Tạo đơn hàng mới
+              </button>
+            </div>
+            
+            <!-- Current Batch Info Display -->
+            <div class="batch-info-display" id="batchInfoDisplay" style="display: none; margin: 10px 0; padding: 10px; background: #f0f8ff; border-left: 4px solid #007bff; border-radius: 4px;">
+              <!-- Dynamic content will be filled by JavaScript -->
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="control-buttons">
+              <button class="control-btn input-btn" onclick="setMode('input')">
+                <i class="fas fa-sign-in-alt"></i>
+                NHẬP
+              </button>
+              <button class="control-btn output-btn active" onclick="setMode('output')">
+                <i class="fas fa-sign-out-alt"></i>
+                XUẤT
+              </button>
+            </div>
+
+            <!-- Time Info -->
+            <div class="time-info">
+              <div class="time-item">
+                <label>Thời gian bắt đầu:</label>
+                <span id="startTime">--:-- - --/--/----</span>
+              </div>
+            </div>
+
+            <!-- Plan vs Execute -->
+            <div class="plan-execute">
+              <div class="plan-item">
+                <label>Kế hoạch:</label>
+                <span id="planCount">0</span>
+              </div>
+              <div class="execute-item">
+                <label>Thực hiện:</label>
+                <span id="executeCount">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order List Table -->
+          <div class="order-list-section">
+            <div class="section-header">
+              <h3><i class="fas fa-list"></i> Danh sách đơn hàng</h3>
+              <div class="list-controls">
+                <select id="batchSelector" onchange="switchBatch()">
+                  <option value="">Chọn danh sách đơn hàng</option>
+                  <!-- Dynamic options -->
+                </select>
+                <span class="total-info" id="totalInfo">
+                  Tổng: <span id="totalSelected">0</span>/<span id="totalOrders">0</span> đơn
+                </span>
+              </div>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination-container" id="paginationContainer">
+              <div class="pagination-info">
+                <span>Trang <span id="currentPage">1</span> / <span id="totalPages">1</span></span>
+                <span>(<span id="showingFrom">0</span>-<span id="showingTo">0</span> / <span id="totalItems">0</span> đơn hàng)</span>
+              </div>
+              <div class="pagination-controls">
+                <button class="page-btn" onclick="goToPage('first')" id="firstPageBtn" disabled>
+                  <i class="fas fa-angle-double-left"></i>
+                </button>
+                <button class="page-btn" onclick="goToPage('prev')" id="prevPageBtn" disabled>
+                  <i class="fas fa-angle-left"></i>
+                </button>
+                <div class="page-numbers" id="pageNumbers">
+                  <!-- Dynamic page numbers -->
+                </div>
+                <button class="page-btn" onclick="goToPage('next')" id="nextPageBtn" disabled>
+                  <i class="fas fa-angle-right"></i>
+                </button>
+                <button class="page-btn" onclick="goToPage('last')" id="lastPageBtn" disabled>
+                  <i class="fas fa-angle-double-right"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="table-container">
+              <table class="order-table">
+                <thead>
+                  <tr>
+                    <th>TT</th>
+                    <th>
+                      <input type="checkbox" id="selectAllCheckbox" onchange="selectAllOrders(this.checked)">
+                      Chọn
+                    </th>
+                    <th>SL</th>
+                    <th>Tên sản phẩm</th>
+                    <th>Mã Khách hàng/ Mã số thuế</th>
+                    <th>Địa chỉ</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="orderTableBody">
+                  <!-- Dynamic content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button id="startBtn" class="action-btn start-btn" onclick="startCounting()">
+              <i class="fas fa-play"></i>
+              Bắt đầu
+            </button>
+            <button id="pauseBtn" class="action-btn pause-btn" onclick="pauseCounting()">
+              <i class="fas fa-pause"></i>
+              Tạm dừng
+            </button>
+            <button id="resetBtn" class="action-btn reset-btn" onclick="resetCounting()">
+              <i class="fas fa-redo"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lịch sử đếm Tab -->
+      <div class="tab-pane" id="history">
+        <div class="history-section">
+          <div class="section-header">
+            <h3><i class="fas fa-history"></i> Lịch sử đếm</h3>
+            <div class="history-controls">
+              <button class="btn-secondary" onclick="exportHistory()">
+                <i class="fas fa-download"></i> Xuất dữ liệu
+              </button>
+              <button class="btn-danger" onclick="clearHistory()">
+                <i class="fas fa-trash"></i> Xóa lịch sử
+              </button>
+            </div>
+          </div>
+          
+          <div class="history-filters">
+            <input type="date" id="dateFrom" class="date-input">
+            <input type="date" id="dateTo" class="date-input">
+            <button class="btn-primary" onclick="filterHistory()">
+              <i class="fas fa-filter"></i> Lọc
+            </button>
+          </div>
+
+          <div class="history-list">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Khách hàng</th>
+                  <th>Địa chỉ</th>
+                  <th>Sản phẩm</th>
+                  <th>Kế hoạch</th>
+                  <th>Thực tế</th>
+                  <th>Kết quả</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <tr>
+                  <td colspan="7" class="text-center">Chưa có lịch sử đếm</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thêm đơn hàng Tab -->
+      <div class="tab-pane" id="order">
+        <div class="order-form-section">
+          <div class="section-header">
+            <h3><i class="fas fa-plus-circle"></i> Tạo danh sách đơn hàng mới</h3>
+            <div class="batch-controls">
+              <select id="currentBatchSelect" onchange="loadBatch()">
+                <option value="">Chọn danh sách</option>
+              </select>
+              <button class="btn-primary" onclick="createNewBatch()">
+                <i class="fas fa-plus"></i> Tạo danh sách mới
+              </button>
+            </div>
+          </div>
+          
+          <div class="batch-info" id="batchInfo" style="display:none;">
+            <div class="form-group">
+              <label for="batchName">Tên khách hàng:</label>
+              <input type="text" id="batchName" placeholder="Kinh Bắc">
+            </div>
+          </div>
+          
+          <div class="order-form-container" id="orderFormContainer" style="display:none;">
+            <h4><i class="fas fa-list"></i> Thêm đơn hàng vào danh sách</h4>
+            
+            <form class="order-form" id="orderForm">
+              <div class="form-group">
+                <label for="customerName">Số điện thoại:</label>
+                <input type="text" id="customerName" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="orderCode">Mã đơn hàng:</label>
+                <input type="text" id="orderCode" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="vehicleNumber">Địa chỉ:</label>
+                <input type="text" id="vehicleNumber" required>
+              </div>
+              
+              <!-- Multiple Products Section -->
+              <div class="products-section">
+                <h5><i class="fas fa-boxes"></i> Danh sách sản phẩm</h5>
+                <div id="productsList">
+                  <div class="product-item" data-index="0">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>Tên Sản phẩm:</label>
+                        <select class="productSelect" required>
+                          <option value="">Chọn sản phẩm</option>
+                          <!-- Dynamic options -->
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label>Số lượng:</label>
+                        <input type="number" class="quantity" min="1" required>
+                      </div>
+                      <div class="form-group">
+                        <label>Cảnh báo gần xong:</label>
+                        <input type="number" class="warningQuantity" min="1">
+                      </div>
+                      <div class="form-group">
+                        <button type="button" class="btn-danger btn-small" onclick="removeProductItem(0)" style="margin-top: 25px;">
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <button type="button" class="btn-secondary" onclick="addProductItem()">
+                  <i class="fas fa-plus"></i> Thêm sản phẩm khác
+                </button>
+              </div>
+              
+              <div class="form-actions">
+                <button type="button" class="btn-primary" onclick="addMultipleOrdersToBatch()">
+                  <i class="fas fa-plus"></i> Thêm tất cả vào danh sách
+                </button>
+                <button type="reset" class="btn-secondary" onclick="resetOrderForm()">
+                  <i class="fas fa-undo"></i> Làm mới form
+                </button>
+              </div>
+            </form>
+
+            <!-- Preview danh sách đơn hàng trong batch -->
+            <div class="batch-preview" id="batchPreview" style="display:none;">
+              <h4><i class="fas fa-eye"></i> Xem trước danh sách</h4>
+              <div class="table-container">
+                <table class="order-table">
+                  <thead>
+                    <tr>
+                      <th>TT</th>
+                      <th>Khách hàng</th>
+                      <th>Mã ĐH</th>
+                      <th>Địa chỉ</th>
+                      <th>Sản phẩm</th>
+                      <th>SL</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody id="batchPreviewBody">
+                    <!-- Dynamic content -->
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="batch-actions">
+                <button class="btn-success" onclick="saveBatch()">
+                  <i class="fas fa-save"></i> Lưu danh sách đơn hàng
+                </button>
+                <button class="btn-danger" onclick="clearBatch()">
+                  <i class="fas fa-trash"></i> Xóa tất cả
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cài đặt sản phẩm Tab -->
+      <div class="tab-pane" id="product">
+        <div class="product-section">
+          <div class="section-header">
+            <h3><i class="fas fa-box"></i> Cài đặt sản phẩm</h3>
+          </div>
+          
+          <div class="product-form">
+            <form id="productForm">
+              <h4 style="margin-bottom: 20px;"><i class="fas fa-layer-group"></i> Thông tin sản phẩm</h4>
+
+              <div class="form-group">
+                <label for="productGroup">Nhóm sản phẩm:</label>
+                <input type="text" id="productGroup" placeholder="Nhập nhóm sản phẩm (VD: Xi măng, Gạch, Thép...)">
+              </div>
+
+              <div class="form-group">
+                <label for="productCode">Mã SP:</label>
+                <input type="text" id="productCode" placeholder="Nhập mã sản phẩm">
+              </div>
+              
+              <div class="form-group">
+                <label for="productName">Tên sản phẩm:</label>
+                <input type="text" id="productName" placeholder="Nhập tên sản phẩm">
+              </div>
+              
+              <div class="form-group">
+                <label for="unitWeight">Trọng lượng đơn vị (kg):</label>
+                <input type="number" id="unitWeight" step="0.1" min="0" placeholder="Nhập trọng lượng 1 đơn vị">
+              </div>
+              
+              <button type="button" class="btn-primary" onclick="addProduct()">
+                <i class="fas fa-plus"></i> Thêm
+              </button>
+            </form>
+          </div>
+          
+          <div class="product-list">
+            <h4>Danh sách sản phẩm</h4>
+            <div class="table-container">
+              <table class="product-table">
+                <thead>
+                  <tr>
+                    <th>Nhóm SP</th>
+                    <th>Mã SP</th>
+                    <th>Tên sản phẩm</th>
+                    <th>Trọng lượng (kg)</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="productTableBody">
+                  <!-- Dynamic content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cấu hình WiFi Tab -->
+      <div class="tab-pane" id="wifi">
+        <div class="wifi-section">
+          <div class="section-header">
+            <h3><i class="fas fa-wifi"></i> Cấu hình WiFi</h3>
+          </div>
+          
+          <!-- Network Status -->
+          <div class="network-status-card">
+            <h4><i class="fas fa-info-circle"></i> Trạng thái kết nối</h4>
+            <div class="status-info">
+              <div class="status-item">
+                <label>Chế độ hiện tại:</label>
+                <span id="currentNetworkMode">Đang kiểm tra...</span>
+              </div>
+              <div class="status-item">
+                <label>Địa chỉ IP:</label>
+                <span id="currentIP">Đang kiểm tra...</span>
+              </div>
+              <div class="status-item" id="wifiSSIDStatus" style="display: none;">
+                <label>WiFi SSID:</label>
+                <span id="currentSSID">-</span>
+              </div>
+            </div>
+            <button class="btn-secondary" onclick="refreshNetworkStatus()">
+              <i class="fas fa-refresh"></i> Làm mới trạng thái
+            </button>
+          </div>
+
+          <!-- WiFi Networks -->
+          <div class="wifi-networks-card">
+            <h4><i class="fas fa-search"></i> Tìm kiếm mạng WiFi</h4>
+            <button class="btn-primary" onclick="scanWiFiNetworks()" id="scanBtn">
+              <i class="fas fa-search"></i> Quét mạng WiFi
+            </button>
+            
+            <div id="wifiNetworks" class="wifi-networks-list">
+              <!-- WiFi networks will be populated here -->
+            </div>
+          </div>
+
+          <!-- Manual WiFi Config -->
+          <div class="wifi-config-card">
+            <h4><i class="fas fa-edit"></i> Cấu hình thủ công</h4>
+            <div class="wifi-form">
+              <div class="form-group">
+                <label>Tên mạng (SSID):</label>
+                <input type="text" id="manualSSID" placeholder="Nhập tên WiFi">
+              </div>
+              <div class="form-group">
+                <label>Mật khẩu:</label>
+                <input type="password" id="manualPassword" placeholder="Mật khẩu WiFi">
+              </div>
+              
+              <!-- Static IP Configuration -->
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="useStaticIP" onchange="toggleStaticIPFields()">
+                  Sử dụng IP tĩnh
+                </label>
+              </div>
+              
+              <div id="staticIPFields" class="static-ip-fields" style="display: none;">
+                <div class="form-actions">
+                  <button type="button" class="btn-info" onclick="fillSuggestedStaticIPValues()" style="margin-bottom: 15px;">
+                    <i class="fas fa-magic"></i> Tự động điền từ mạng hiện tại
+                  </button>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>IP Address:</label>
+                    <input type="text" id="staticIP" placeholder="192.168.1.201">
+                  </div>
+                  <div class="form-group">
+                    <label>Gateway:</label>
+                    <input type="text" id="staticGateway" placeholder="192.168.1.1">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Subnet Mask:</label>
+                    <input type="text" id="staticSubnet" placeholder="255.255.255.0">
+                  </div>
+                  <div class="form-group">
+                    <label>DNS 1:</label>
+                    <input type="text" id="staticDNS1" placeholder="8.8.8.8">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>DNS 2:</label>
+                    <input type="text" id="staticDNS2" placeholder="8.8.4.4">
+                  </div>
+                </div>
+              </div>
+              
+              <button class="btn-success" onclick="connectManualWiFi()">
+                <i class="fas fa-link"></i> Kết nối
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cài đặt chung Tab -->
+      <div class="tab-pane" id="settings">
+        <div class="settings-section">
+          <div class="section-header">
+            <h3><i class="fas fa-cog"></i> Cài đặt chung</h3>
+          </div>
+          
+          <div class="settings-form">
+            <div class="setting-group">
+              <h4><i class="fas fa-conveyor-belt"></i> Thông tin băng tải</h4>
+              <div class="form-group">
+                <label for="conveyorName">Tên/Số hiệu băng tải:</label>
+                <input type="text" id="conveyorName" value="BT-001">
+              </div>
+              <div class="form-group">
+                <label for="location">Địa điểm:</label>
+                <input type="text" id="location" placeholder="Nhập địa điểm đặt băng tải">
+              </div>
+            </div>
+            
+            <div class="setting-group">
+              <h4><i class="fas fa-network-wired"></i> Cài đặt mạng</h4>
+              <div class="form-group">
+                <label for="ipAddress">Địa chỉ IP:</label>
+                <input type="text" id="ipAddress" value="192.168.1.200">
+              </div>
+              <div class="form-group">
+                <label for="gateway">Gateway:</label>
+                <input type="text" id="gateway" value="192.168.1.1">
+              </div>
+              <div class="form-group">
+                <label for="subnet">Subnet Mask:</label>
+                <input type="text" id="subnet" value="255.255.255.0">
+              </div>
+            </div>
+            
+            <div class="setting-group">
+              <h4><i class="fas fa-sensor"></i> Cài đặt cảm biến</h4>
+              <div class="form-group">
+                <label for="sensorDelay">Độ trễ cảm biến (ms):</label>
+                <input type="number" id="sensorDelay" value="0" min="0" max="0">
+                <small>Thời gian chờ giữa các lần đọc cảm biến</small>
+              </div>
+              <div class="form-group">
+                <label for="bagTimeMultiplier">Phần trăm thời gian sai số(%):</label>
+                <input type="number" id="bagTimeMultiplier" value="25" min="1" max="100">
+                <small>Tỷ lệ % thời gian sai số (1-100%)</small>
+              </div>
+              
+              <!-- Weight-based Detection Delay Configuration -->
+              <div id="weightBasedDelayConfig" class="weight-based-delay-config" style="display: block;">
+                <h5 class="weight-config-title"><i class="fas fa-weight"></i> Cấu hình thời gian xác nhận theo khối lượng</h5>
+                <div id="weightDelayRules" class="weight-delay-rules">
+                  <!-- Dynamic weight delay rules will be added here -->
+                </div>
+                <button type="button" class="btn-secondary btn-small add-weight-rule-btn" onclick="addWeightDelayRule()">
+                  <i class="fas fa-plus"></i> Thêm mốc khối lượng
+                </button>
+              </div>
+              
+              <!-- Sensor Timing Measurement -->
+              <div class="form-group">
+                <h5 class="sensor-timing-title"><i class="fas fa-stopwatch"></i> Đo thời gian sensor</h5>
+                <div class="sensor-timing-container">
+                  <div id="sensorTimingDisplay" class="sensor-timing-display">
+                    <div class="sensor-timing-info">
+                      <div class="timing-row">
+                        <span class="timing-label">Trạng thái sensor:</span>
+                        <span class="timing-value">Đang tải...</span>
+                      </div>
+                      <div class="timing-row">
+                        <span class="timing-label">Thời gian đo cuối:</span>
+                        <span class="timing-value">Chưa có</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn-warning btn-small" onclick="clearSensorTiming()">
+                    <i class="fas fa-eraser"></i> Xóa thời gian đo
+                  </button>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="minBagInterval">Khoảng cách tối thiểu giữa 2 bao (ms):</label>
+                <input type="number" id="minBagInterval" value="100" min="50" max="1000">
+                <small>Thời gian chờ tối thiểu giữa 2 lần đếm để tránh đếm sai</small>
+              </div>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="autoReset">
+                  Tự động reset sau khi hoàn thành
+                </label>
+              </div>
+            </div>
+            
+            <div class="setting-group">
+              <h4><i class="fas fa-display"></i> Cài đặt hiển thị</h4>
+              <div class="form-group">
+                <label for="brightness">Độ sáng LED (%):</label>
+                <input type="range" id="brightness" min="10" max="100" value="35">
+                <span id="brightnessValue">35%</span>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4><i class="fas fa-bolt"></i> Cài đặt Relay</h4>
+              <div class="form-group">
+                <label for="relayDelay">Thời gian chạy thêm relay sau khi đếm xong (giây):</label>
+                <input type="number" id="relayDelay" min="0" max="60" value="5" step="1">
+                <small>Relay sẽ tiếp tục chạy thêm thời gian này sau khi hoàn thành đơn hàng</small>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4><i class="fas fa-network-wired"></i> Cài đặt MQTT Broker</h4>
+              <div class="form-group">
+                <label for="mqttServer">Địa chỉ MQTT Broker chính:</label>
+                <input type="text" id="mqttServer" placeholder="192.168.1.100">
+                <small>Địa chỉ IP hoặc hostname của MQTT broker chính</small>
+              </div>
+              <div class="form-group">
+                <label for="mqttPort">Cổng MQTT:</label>
+                <input type="number" id="mqttPort" min="1" max="65535" value="1883">
+                <small>Cổng của MQTT broker (mặc định: 1883)</small>
+              </div>
+              <div class="form-group">
+                <label for="mqttServerBackup">Địa chỉ MQTT Broker dự phòng:</label>
+                <input type="text" id="mqttServerBackup" placeholder="test.mosquitto.org">
+                <small>Địa chỉ broker dự phòng khi broker chính không khả dụng</small>
+              </div>
+              <div class="form-group">
+                <label for="mqttWebSocketPort">Cổng WebSocket MQTT:</label>
+                <input type="number" id="mqttWebSocketPort" min="1" max="65535" value="8080">
+                <small>Cổng WebSocket để web interface kết nối (mặc định: 8080)</small>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4><i class="fas fa-cloud"></i> Cài đặt MQTT Broker 2 (Server báo cáo)</h4>
+              <div class="form-group">
+                <label for="mqtt2Server">Địa chỉ Server báo cáo:</label>
+                <input type="text" id="mqtt2Server" placeholder="103.57.220.146">
+                <small>Địa chỉ IP server để gửi báo cáo dữ liệu</small>
+              </div>
+              <div class="form-group">
+                <label for="mqtt2Port">Cổng Server:</label>
+                <input type="number" id="mqtt2Port" min="1" max="65535" value="1884">
+                <small>Cổng của server báo cáo (mặc định: 1884)</small>
+              </div>
+              <div class="form-group">
+                <label for="mqtt2Username">Username:</label>
+                <input type="text" id="mqtt2Username" value="countingsystem" readonly style="background-color: #f5f5f5;">
+                <small>Username cố định cho tất cả thiết bị</small>
+              </div>
+              <div class="form-group">
+                <label for="mqtt2Password">KeyLogin (Password):</label>
+                <input type="text" id="mqtt2Password" placeholder="Nhập mã KeyLogin của thiết bị">
+                <small>Mã định danh riêng của thiết bị (được cung cấp từ server)</small>
+              </div>
+              <div class="form-group">
+                <div class="mqtt2-status">
+                  <span id="mqtt2Status" class="status-indicator offline">Chưa kết nối</span>
+                  <button type="button" class="btn-secondary btn-small" onclick="testMQTT2Connection()">
+                    <i class="fas fa-plug"></i> Test kết nối
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4><i class="fas fa-microchip"></i> Thông tin thiết bị</h4>
+              <div class="form-group">
+                <label for="deviceCode">Mã MAC của thiết bị:</label>
+                <input type="text" id="deviceCode" readonly style="background-color: #f5f5f5;">
+                <small>Mã định danh duy nhất của thiết bị ESP32 để gửi báo cáo lên server</small>
+              </div>
+              <div class="form-group">
+                <label for="mqttTopic">MQTT Topic:</label>
+                <input type="text" id="mqttTopic" readonly style="background-color: #f5f5f5;">
+                <small>Topic MQTT được sử dụng để giao tiếp với server</small>
+              </div>
+            </div>
+            
+            <button class="btn-success" onclick="saveSettings()">
+              <i class="fas fa-save"></i> Lưu cài đặt
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Order Modal -->
+  <div id="editOrderModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-edit"></i> Sửa đơn hàng</h3>
+        <span class="close" onclick="closeEditOrderModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="editOrderForm">
+          <input type="hidden" id="editOrderIndex">
+          <div class="form-group">
+            <label for="editQuantity">Số lượng:</label>
+            <input type="number" id="editQuantity" min="1" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="saveEditOrder()">
+          <i class="fas fa-save"></i> Lưu thay đổi
+        </button>
+        <button class="btn-secondary" onclick="closeEditOrderModal()">
+          <i class="fas fa-times"></i> Hủy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password Modal for Protected Tabs -->
+  <div id="passwordModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-lock"></i> Nhập mật khẩu</h3>
+        <span class="close" onclick="closePasswordModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Vui lòng nhập mật khẩu để truy cập trang này:</p>
+        <div class="form-group">
+          <input type="password" id="adminPassword" placeholder="Nhập mật khẩu..." autocomplete="off">
+        </div>
+        <div class="password-error" id="passwordError" style="display: none; color: red; margin-top: 10px;">
+          Mật khẩu không đúng!
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="verifyPassword()">
+          <i class="fas fa-unlock"></i> Xác nhận
+        </button>
+        <button class="btn-secondary" onclick="closePasswordModal()">
+          <i class="fas fa-times"></i> Hủy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MQTT.js library for WebSocket MQTT -->
+  <script src="mqtt.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
