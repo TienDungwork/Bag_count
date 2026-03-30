@@ -57,7 +57,7 @@ let settings = {
   autoReset: false,
   brightness: 100,
   relayDelayAfterComplete: 5000,
-  mqttServer: '192.168.41.103',
+  mqttServer: '192.168.1.103',
   mqttServerBackup: 'test.mosquitto.org',
   mqttPort: 1883,
   mqttWebSocketPort: 8080,
@@ -4034,7 +4034,7 @@ function updateSettingsForm() {
   const mqttPortEl = document.getElementById('mqttPort');
   const mqttWebSocketPortEl = document.getElementById('mqttWebSocketPort');
   
-  if (mqttServerEl) mqttServerEl.value = settings.mqttServer || '192.168.41.103';
+  if (mqttServerEl) mqttServerEl.value = settings.mqttServer || '192.168.1.103';
   if (mqttServerBackupEl) mqttServerBackupEl.value = settings.mqttServerBackup || 'test.mosquitto.org';
   if (mqttPortEl) mqttPortEl.value = settings.mqttPort || 1883;
   if (mqttWebSocketPortEl) mqttWebSocketPortEl.value = settings.mqttWebSocketPort || 8080;

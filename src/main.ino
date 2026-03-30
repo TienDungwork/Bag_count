@@ -74,7 +74,7 @@ const char* ap_ssid = "BO DEM THONG MINH";
 const char* ap_password = "0989328858";
 
 //----------------------------------------Network & MQTT config
-String mqtt_server = "192.168.41.103";  // Địa chỉ IP của máy tính chạy broker local
+String mqtt_server = "192.168.1.103";  // Địa chỉ IP của máy tính chạy broker local
 String mqtt_server_backup = "test.mosquitto.org";
 int mqtt_port = 1883;
 int mqtt_websocket_port = 8080;  // port MQTT
@@ -952,8 +952,8 @@ void createDefaultSettingsFile() {
   DynamicJsonDocument doc(2048);
   
   // Network settings - default values
-  doc["ipAddress"] = "192.168.41.200";
-  doc["gateway"] = "192.168.41.1";
+  doc["ipAddress"] = "192.168.1.200";
+  doc["gateway"] = "192.168.1.1";
   doc["subnet"] = "255.255.255.0";
   doc["dns1"] = "8.8.8.8";
   doc["dns2"] = "8.8.4.4";
@@ -970,7 +970,7 @@ void createDefaultSettingsFile() {
   doc["bagTimeMultiplier"] = 25;  // Default 25%
   
   // MQTT settings - default values
-  doc["mqttServer"] = "192.168.41.103";
+  doc["mqttServer"] = "192.168.1.103";
   doc["mqttServerBackup"] = "test.mosquitto.org";
   doc["mqttPort"] = 1883;
   doc["mqttWebSocketPort"] = 8080;
