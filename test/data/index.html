@@ -632,26 +632,21 @@
             </div>
 
             <div class="setting-group">
-              <h4><i class="fas fa-network-wired"></i> Cài đặt MQTT Broker</h4>
+              <h4><i class="fas fa-broadcast-tower"></i> Realtime WebSocket nội bộ</h4>
               <div class="form-group">
-                <label for="mqttServer">Địa chỉ MQTT Broker chính:</label>
-                <input type="text" id="mqttServer" placeholder="192.168.1.100">
-                <small>Địa chỉ IP hoặc hostname của MQTT broker chính</small>
+                <label for="realtimeHost">Địa chỉ thiết bị:</label>
+                <input type="text" id="realtimeHost" readonly style="background-color: #f5f5f5;">
+                <small>Web interface kết nối trực tiếp tới ESP32, không cần MQTT broker nội bộ</small>
               </div>
               <div class="form-group">
-                <label for="mqttPort">Cổng MQTT:</label>
-                <input type="number" id="mqttPort" min="1" max="65535" value="1883">
-                <small>Cổng của MQTT broker (mặc định: 1883)</small>
+                <label for="realtimePort">Cổng WebSocket:</label>
+                <input type="text" id="realtimePort" readonly style="background-color: #f5f5f5;">
+                <small>Cổng realtime nội bộ cố định của ESP32</small>
               </div>
               <div class="form-group">
-                <label for="mqttServerBackup">Địa chỉ MQTT Broker dự phòng:</label>
-                <input type="text" id="mqttServerBackup" placeholder="test.mosquitto.org">
-                <small>Địa chỉ broker dự phòng khi broker chính không khả dụng</small>
-              </div>
-              <div class="form-group">
-                <label for="mqttWebSocketPort">Cổng WebSocket MQTT:</label>
-                <input type="number" id="mqttWebSocketPort" min="1" max="65535" value="8080">
-                <small>Cổng WebSocket để web interface kết nối (mặc định: 8080)</small>
+                <label for="realtimePath">Đường dẫn WebSocket:</label>
+                <input type="text" id="realtimePath" readonly style="background-color: #f5f5f5;">
+                <small>Endpoint realtime mà trình duyệt sử dụng để nhận số đếm và gửi lệnh</small>
               </div>
             </div>
 
@@ -695,9 +690,9 @@
                 <small>Mã định danh duy nhất của thiết bị ESP32 để gửi báo cáo lên server</small>
               </div>
               <div class="form-group">
-                <label for="mqttTopic">MQTT Topic:</label>
-                <input type="text" id="mqttTopic" readonly style="background-color: #f5f5f5;">
-                <small>Topic MQTT được sử dụng để giao tiếp với server</small>
+                <label for="realtimeEndpoint">Realtime endpoint:</label>
+                <input type="text" id="realtimeEndpoint" readonly style="background-color: #f5f5f5;">
+                <small>Endpoint WebSocket nội bộ của thiết bị</small>
               </div>
             </div>
             
@@ -765,7 +760,6 @@
   </div>
 
   <!-- MQTT.js library for WebSocket MQTT -->
-  <script src="mqtt.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

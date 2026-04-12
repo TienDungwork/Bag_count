@@ -22,17 +22,21 @@ let currentPage = 1;
 let itemsPerPage = 10;
 let totalPages = 1;
 
-// MQTT Configuration
+// Realtime WebSocket configuration
 let mqttClient = null;
 let mqttConnected = false;
 let currentDeviceStatus = {};
 let lastMqttUpdate = 0;
+let mqttReconnectTimer = null;
+const REALTIME_WS_PORT = 81;
+const REALTIME_WS_PATH = '/ws';
 
 // Device connection monitoring
 let lastHeartbeat = 0;
 let deviceConnected = false;
 let heartbeatCheckInterval = null;
 const HEARTBEAT_TIMEOUT = 5000; // 45 giây không có heartbeat thì coi như mất kết nối (ESP32 gửi mỗi 30s)
+let statusPollingInterval = null;
 
 // API polling configuration (MANAGEMENT DATA ONLY - NO real-time counting or IR commands)
 let apiPollingInterval = null;
@@ -57,10 +61,8 @@ let settings = {
   autoReset: false,
   brightness: 100,
   relayDelayAfterComplete: 5000,
-  mqttServer: '192.168.1.103',
-  mqttServerBackup: 'test.mosquitto.org',
-  mqttPort: 1883,
-  mqttWebSocketPort: 8080,
+  realtimePort: REALTIME_WS_PORT,
+  realtimePath: REALTIME_WS_PATH,
   // Weight-based detection delay configuration - LUÔN BẬT
   weightDelayRules: [
     { weight: 50, delay: 3000 },  // 50kg -> 3000ms
@@ -109,7 +111,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   updateConveyorNameDisplay();
   showTab('overview');
   
-  // Initialize MQTT Client AFTER settings are loaded
+  // Initialize realtime client AFTER settings are loaded
   setTimeout(() => {
     initMQTTClient();
   }, 1000);
@@ -752,136 +754,91 @@ async function resetAllDataToDefault() {
   }
 }
 
-// MQTT Client Setup  
+// Realtime WebSocket setup
 function initMQTTClient() {
   try {
-    // Use WebSockets MQTT client (you'll need to include mqtt.js library)
-    // For now, we'll implement a fallback approach
-    console.log('Attempting MQTT WebSocket connection...');
-    
-    // Try to connect via WebSocket MQTT (if available)
-    if (typeof mqtt !== 'undefined') {
-      // RE-ENABLE MQTT with stable broker
-      console.log('Initializing MQTT with stable broker...');
-      
-      // Try multiple stable MQTT brokers with fallback - PRIORITIZE SAME AS ESP32
-      const brokers = [
-        `ws://${settings.mqttServer}:${settings.mqttWebSocketPort}/mqtt`, // Primary broker từ settings
-        `ws://${settings.mqttServerBackup}:${settings.mqttWebSocketPort}/mqtt` // Backup broker từ settings
-      ];
-      
-      let brokerIndex = 0;
-      const tryNextBroker = () => {
-        if (brokerIndex >= brokers.length) {
-          console.log('All MQTT brokers failed, using API-only mode');
-          mqttConnected = false;
-          updateMQTTStatus(false);
-          startStatusPollingFallback();
+    if (mqttReconnectTimer) {
+      clearTimeout(mqttReconnectTimer);
+      mqttReconnectTimer = null;
+    }
+
+    if (mqttClient && (mqttClient.readyState === WebSocket.OPEN || mqttClient.readyState === WebSocket.CONNECTING)) {
+      mqttClient.close();
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
+
+    console.log('Connecting realtime WebSocket:', wsUrl);
+    mqttClient = new WebSocket(wsUrl);
+
+    mqttClient.onopen = function() {
+      console.log('Realtime WebSocket connected');
+      mqttConnected = true;
+      updateMQTTStatus(true);
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+      }
+      subscribeMQTTTopics();
+      startDeviceMonitoring();
+    };
+
+    mqttClient.onmessage = function(event) {
+      try {
+        const envelope = JSON.parse(event.data);
+        if (!envelope.topic) {
+          console.warn('Realtime message missing topic:', envelope);
           return;
         }
-        
-        const brokerUrl = brokers[brokerIndex];
-        
-        mqttClient = mqtt.connect(brokerUrl, {
-          clientId: `WebClient_${Date.now()}`,
-          keepalive: 30,
-          reconnectPeriod: 5000
+
+        const data = envelope.data || {};
+
+        if (envelope.topic === 'bagcounter/count') {
+          console.log('Realtime count received:', data.count, 'Target:', data.target, 'Type:', data.type, 'Full data:', data);
+        }
+
+        if (envelope.topic === 'bagcounter/ir_command') {
+          console.log('IR Command received via WebSocket:', {
+            topic: envelope.topic,
+            command: data.command,
+            timestamp: new Date().toLocaleTimeString(),
+            fullData: data
+          });
+        }
+
+        handleMQTTMessage(envelope.topic, data).catch(error => {
+          console.error('Realtime message handler error:', error);
         });
-        
-        mqttClient.on('connect', function() {
-          console.log(`MQTT Connected to broker ${brokerIndex + 1}: ${brokers[brokerIndex]}`);
-          console.log(`Same broker as ESP32: ${brokers[brokerIndex].includes('hivemq') ? 'YES' : 'NO'}`);
-          mqttConnected = true;
-          updateMQTTStatus(true);
-          
-          // Subscribe to all relevant topics
-          subscribeMQTTTopics();
-          
-          // Start device monitoring
-          startDeviceMonitoring();
-        });
-        
-        mqttClient.on('message', function(topic, message) {
-          try {
-            const messageStr = message.toString();
-            const data = JSON.parse(messageStr);
-            
-            // Debug real-time count updates  
-            if (topic === 'bagcounter/count') {
-              console.log('MQTT Count received:', data.count, 'Target:', data.target, 'Type:', data.type, 'Full data:', data);
-            }
-            
-            // Debug IR commands specifically
-            if (topic === 'bagcounter/ir_command') {
-              console.log('IR Command received via MQTT:', {
-                topic: topic,
-                command: data.command,
-                timestamp: new Date().toLocaleTimeString(),
-                fullData: data
-              });
-            }
-            
-            handleMQTTMessage(topic, data).catch(error => {
-              console.error('MQTT message handler error:', error);
-            });
-          } catch (error) {
-            console.error('MQTT message parse error:', error);
-          }
-        });
-        
-        mqttClient.on('error', function(error) {
-          brokerIndex++;
-          if (brokerIndex < brokers.length) {
-            console.log('Trying next broker...');
-            setTimeout(tryNextBroker, 2000);
-          } else {
-            console.log('All MQTT brokers failed, using API-only mode');
-            mqttConnected = false;
-            updateMQTTStatus(false);
-            startStatusPollingFallback();
-          }
-        });
-        
-        mqttClient.on('disconnect', function() {
-          console.log('MQTT Disconnected');
-          mqttConnected = false;
-          updateMQTTStatus(false);
-        });
-      };
-      
-      // Start trying brokers
-      tryNextBroker();
-      
-    } else {
-      startStatusPollingFallback();
-    }
-    
+      } catch (error) {
+        console.error('Realtime message parse error:', error);
+      }
+    };
+
+    mqttClient.onerror = function(error) {
+      console.error('Realtime WebSocket error:', error);
+    };
+
+    mqttClient.onclose = function() {
+      console.log('Realtime WebSocket disconnected');
+      mqttConnected = false;
+      updateMQTTStatus(false);
+
+      if (!mqttReconnectTimer) {
+        mqttReconnectTimer = setTimeout(() => {
+          mqttReconnectTimer = null;
+          initMQTTClient();
+        }, 2000);
+      }
+    };
   } catch (error) {
     startStatusPollingFallback();
   }
 }
 
 function subscribeMQTTTopics() {
-  if (!mqttClient || !mqttConnected) return;
-  
-  const topics = [
-    'bagcounter/status',
-    'bagcounter/count', 
-    'bagcounter/alerts',
-    'bagcounter/sensor',
-    'bagcounter/heartbeat',
-    'bagcounter/ir_command'
-  ];
-  
-  topics.forEach(topic => {
-    mqttClient.subscribe(topic, function(err) {
-      if (err) {
-        console.error(`Failed to subscribe to ${topic}:`, err);
-      } else {
-        console.log(`Subscribed to ${topic}`);
-      }
-    });
-  });
+  if (!mqttConnected) return;
+  console.log('Realtime WebSocket subscribed to built-in device stream');
 }
 
 // Handle MQTT Messages
@@ -1481,24 +1438,26 @@ function updateUIForReset() {
 
 // MQTT Command Functions
 function sendMQTTCommand(topic, payload) {
-  console.log(`MQTT Debug - Sending command to: ${topic}`);
-  console.log(`MQTT Client connected: ${mqttConnected}`);
-  console.log(`MQTT Client exists: ${!!mqttClient}`);
-  console.log(`MQTT Client.connected: ${mqttClient ? mqttClient.connected : 'N/A'}`);
+  console.log(`Realtime Debug - Sending command to: ${topic}`);
+  console.log(`Realtime connected: ${mqttConnected}`);
+  console.log(`Realtime client exists: ${!!mqttClient}`);
+  console.log(`Realtime readyState: ${mqttClient ? mqttClient.readyState : 'N/A'}`);
   
-  if (!mqttClient || !mqttConnected) {
-    console.warn('MQTT not connected, command failed:', topic);
+  if (!mqttClient || !mqttConnected || mqttClient.readyState !== WebSocket.OPEN) {
+    console.warn('Realtime WebSocket not connected, command failed:', topic);
     return false;
   }
   
   try {
-    const message = JSON.stringify(payload);
-    const result = mqttClient.publish(topic, message);
-    console.log(`MQTT Command sent: ${topic}`, payload);
-    console.log(`Publish result:`, result);
+    const message = JSON.stringify({
+      topic,
+      data: payload
+    });
+    mqttClient.send(message);
+    console.log(`Realtime command sent: ${topic}`, payload);
     return true;
   } catch (error) {
-    console.error('Failed to send MQTT command:', error);
+    console.error('Failed to send realtime command:', error);
     return false;
   }
 }
@@ -1622,17 +1581,16 @@ async function loadManagementData() {
 
 // Fallback to old API polling if MQTT fails - DISABLED to prevent data overwrites
 function startStatusPollingFallback() {
-  console.log('Status polling fallback disabled - using MQTT-only mode');
-  console.log('Real-time data will only be available via MQTT');
-  showNotification('MQTT required for real-time data', 'warning');
-  // startStatusPolling(); // DISABLED to prevent settings overwrite
+  console.log('Realtime WebSocket unavailable, switching to API polling fallback');
+  showNotification('Realtime WebSocket mất kết nối, chuyển sang polling dự phòng', 'warning');
+  startStatusPolling();
 }
 
 // UI Update Functions
 function updateMQTTStatus(connected) {
   const statusElement = document.getElementById('mqttStatus');
   if (statusElement) {
-    statusElement.textContent = connected ? 'MQTT Connected' : 'API Mode';
+    statusElement.textContent = connected ? 'Realtime Connected' : 'Polling Mode';
     statusElement.style.color = connected ? 'green' : 'orange';
   }
 }
@@ -3964,11 +3922,8 @@ async function loadSettingsFromESP32() {
       if (esp32Settings.autoReset !== undefined) settings.autoReset = esp32Settings.autoReset;
       if (esp32Settings.relayDelayAfterComplete !== undefined) settings.relayDelayAfterComplete = esp32Settings.relayDelayAfterComplete;
       
-      // MQTT settings
-      if (esp32Settings.mqttServer !== undefined) settings.mqttServer = esp32Settings.mqttServer;
-      if (esp32Settings.mqttServerBackup !== undefined) settings.mqttServerBackup = esp32Settings.mqttServerBackup;
-      if (esp32Settings.mqttPort !== undefined) settings.mqttPort = esp32Settings.mqttPort;
-      if (esp32Settings.mqttWebSocketPort !== undefined) settings.mqttWebSocketPort = esp32Settings.mqttWebSocketPort;
+      if (esp32Settings.realtimePort !== undefined) settings.realtimePort = esp32Settings.realtimePort;
+      if (esp32Settings.realtimePath !== undefined) settings.realtimePath = esp32Settings.realtimePath;
       
       // MQTT2 settings (Server báo cáo)
       if (esp32Settings.mqtt2Server !== undefined) settings.mqtt2Server = esp32Settings.mqtt2Server;
@@ -4028,23 +3983,13 @@ function updateSettingsForm() {
   if (brightnessValueEl) brightnessValueEl.textContent = (settings.brightness || 100) + '%';
   if (relayDelayEl) relayDelayEl.value = (settings.relayDelayAfterComplete || 5000) / 1000; // Convert ms to seconds
   
-  // MQTT settings - ĐẢM BẢO LOAD TỪ ESP32
-  const mqttServerEl = document.getElementById('mqttServer');
-  const mqttServerBackupEl = document.getElementById('mqttServerBackup');
-  const mqttPortEl = document.getElementById('mqttPort');
-  const mqttWebSocketPortEl = document.getElementById('mqttWebSocketPort');
-  
-  if (mqttServerEl) mqttServerEl.value = settings.mqttServer || '192.168.1.103';
-  if (mqttServerBackupEl) mqttServerBackupEl.value = settings.mqttServerBackup || 'test.mosquitto.org';
-  if (mqttPortEl) mqttPortEl.value = settings.mqttPort || 1883;
-  if (mqttWebSocketPortEl) mqttWebSocketPortEl.value = settings.mqttWebSocketPort || 8080;
-  
-  console.log('✅ MQTT settings loaded to form:', {
-    mqttServer: settings.mqttServer,
-    mqttServerBackup: settings.mqttServerBackup,
-    mqttPort: settings.mqttPort,
-    mqttWebSocketPort: settings.mqttWebSocketPort
-  });
+  const realtimeHostEl = document.getElementById('realtimeHost');
+  const realtimePortEl = document.getElementById('realtimePort');
+  const realtimePathEl = document.getElementById('realtimePath');
+
+  if (realtimeHostEl) realtimeHostEl.value = window.location.hostname || settings.ipAddress || '';
+  if (realtimePortEl) realtimePortEl.value = settings.realtimePort || REALTIME_WS_PORT;
+  if (realtimePathEl) realtimePathEl.value = settings.realtimePath || REALTIME_WS_PATH;
   
   // MQTT2 settings (Server báo cáo)
   const mqtt2ServerEl = document.getElementById('mqtt2Server');
@@ -4905,17 +4850,15 @@ function sendSettingsViaMQTT() {
         autoReset: settings.autoReset
       };
       
-      const message = JSON.stringify(mqttSettings);
-      console.log('Sending settings via MQTT:', message);
-      
-      mqttClient.publish('bagcounter/config/update', message);
-      console.log('Settings sent via MQTT');
+      console.log('Sending settings via realtime WebSocket:', mqttSettings);
+      sendMQTTCommand('bagcounter/config/update', mqttSettings);
+      console.log('Settings sent via realtime WebSocket');
       
     } catch (error) {
-      console.error('Error sending settings via MQTT:', error);
+      console.error('Error sending settings via realtime WebSocket:', error);
     }
   } else {
-    console.log('MQTT not connected, skipping MQTT settings sync');
+    console.log('Realtime WebSocket not connected, skipping realtime settings sync');
   }
 }
 
@@ -5308,12 +5251,6 @@ function saveSettings() {
   settings.brightness = parseInt(document.getElementById('brightness').value);
   settings.relayDelayAfterComplete = parseInt(document.getElementById('relayDelay').value) * 1000; // Convert seconds to ms
   
-  // MQTT settings
-  settings.mqttServer = document.getElementById('mqttServer').value;
-  settings.mqttServerBackup = document.getElementById('mqttServerBackup').value;
-  settings.mqttPort = parseInt(document.getElementById('mqttPort').value);
-  settings.mqttWebSocketPort = parseInt(document.getElementById('mqttWebSocketPort').value);
-  
   // MQTT2 settings (Server báo cáo)
   settings.mqtt2Server = document.getElementById('mqtt2Server').value;
   settings.mqtt2Port = parseInt(document.getElementById('mqtt2Port').value);
@@ -5430,7 +5367,7 @@ async function testMQTT2Connection() {
   }
 }
 
-// Get device information (MAC address and MQTT topic)
+// Get device information (MAC address and realtime endpoint)
 async function getDeviceInfo() {
   try {
     console.log(' Getting device info from ESP32...');
@@ -5450,10 +5387,9 @@ async function getDeviceInfo() {
         deviceCodeField.value = macInfo;
       }
       
-      // Update MQTT topic field
-      const mqttTopicField = document.getElementById('mqttTopic');
-      if (mqttTopicField) {
-        mqttTopicField.value = deviceInfo.mqttTopic || 'bagcounter/unknown';
+      const realtimeEndpointField = document.getElementById('realtimeEndpoint');
+      if (realtimeEndpointField) {
+        realtimeEndpointField.value = deviceInfo.realtimeEndpoint || `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
       }
       
       // Update conveyor name if available
@@ -5474,13 +5410,13 @@ async function getDeviceInfo() {
     
     // Set default values when API fails
     const deviceCodeField = document.getElementById('deviceCode');
-    const mqttTopicField = document.getElementById('mqttTopic');
+    const realtimeEndpointField = document.getElementById('realtimeEndpoint');
     
     if (deviceCodeField) {
       deviceCodeField.value = 'API không khả dụng - Vui lòng kiểm tra kết nối';
     }
-    if (mqttTopicField) {
-      mqttTopicField.value = 'bagcounter/esp32_default';
+    if (realtimeEndpointField) {
+      realtimeEndpointField.value = `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
     }
     
     console.log(' Device info set to default values due to API error');
@@ -5549,11 +5485,6 @@ function sendSettingsToESP32() {
     relayDelayAfterComplete: settings.relayDelayAfterComplete,
     // Weight-based delay settings
     weightDelayRules: settings.weightDelayRules,
-    // MQTT settings
-    mqttServer: settings.mqttServer,
-    mqttServerBackup: settings.mqttServerBackup,
-    mqttPort: settings.mqttPort,
-    mqttWebSocketPort: settings.mqttWebSocketPort,
     // MQTT2 settings
     mqtt2Server: settings.mqtt2Server,
     mqtt2Port: settings.mqtt2Port,
@@ -5568,11 +5499,6 @@ function sendSettingsToESP32() {
   };
   
   console.log('Sending settings to ESP32 (will override defaults):', data);
-  console.log('DEBUG MQTT Settings being sent:');
-  console.log('  mqttServer:', settings.mqttServer);
-  console.log('  mqttServerBackup:', settings.mqttServerBackup);
-  console.log('  mqttPort:', settings.mqttPort);
-  console.log('  mqttWebSocketPort:', settings.mqttWebSocketPort);
   console.log('DEBUG Weight-based delay settings being sent:');
   console.log('  enableWeightBasedDelay:', settings.enableWeightBasedDelay);
   console.log('  weightDelayRules:', settings.weightDelayRules);
@@ -5606,18 +5532,6 @@ function sendSettingsToESP32() {
       // KHÔNG reload settings từ ESP32 để tránh ghi đè giá trị vừa save
       // Chỉ cập nhật display name
       updateConveyorNameDisplay();
-      
-      // Reconnect MQTT with new settings if they changed
-      if (settings.mqttServer || settings.mqttWebSocketPort) {
-        console.log('MQTT settings may have changed, reconnecting...');
-        setTimeout(() => {
-          if (mqttClient) {
-            mqttClient.end();
-            mqttClient = null;
-          }
-          initMQTTClient(); // Reinitialize with new settings
-        }, 2000);
-      }
       
       // Optional: chỉ verify sau 3 giây và không ghi đè
       setTimeout(async () => {
@@ -5667,14 +5581,18 @@ function restartESP32() {
 
 // Legacy API polling (kept as fallback only)  
 function startStatusPolling() {
-  console.log('Using legacy API polling - MQTT failed');
+  console.log('Using legacy API polling - realtime WebSocket failed');
   
   let lastStatus = '';
   let lastCount = 0;
   let lastIRTimestamp = 0;
   
   // Reduced frequency polling as fallback
-  setInterval(async () => {
+  if (statusPollingInterval) {
+    clearInterval(statusPollingInterval);
+  }
+
+  statusPollingInterval = setInterval(async () => {
     try {
       const response = await fetch('/api/status');
       if (response.ok) {
@@ -6558,10 +6476,10 @@ window.testConnectivity = function() {
 };
 
 window.testMQTTCount = function() {
-  console.log('Testing MQTT count updates...');
+  console.log('Testing realtime count updates...');
   
-  // Test 1: Check MQTT connection
-  console.log('1. MQTT Connection Status:');
+  // Test 1: Check realtime connection
+  console.log('1. Realtime Connection Status:');
   console.log('   Connected:', mqttConnected);
   console.log('   Client exists:', !!mqttClient);
   console.log('   Last MQTT update:', lastMqttUpdate ? new Date(lastMqttUpdate) : 'Never');
@@ -6586,21 +6504,21 @@ window.testMQTTCount = function() {
   handleCountUpdate(testCountData);
   
   console.log('Manual test completed. Check "Thực hiện" field should show:', testCountData.count);
-  console.log('If this works but real MQTT doesn\'t, problem is in MQTT communication');
+  console.log('If this works but realtime data does not update, problem is in WebSocket communication');
 };
 
 window.debugMQTTTopics = function() {
-  console.log('MQTT Topics Debug:');
-  console.log('Subscribed topics should include:');
+  console.log('Realtime topic debug:');
+  console.log('Built-in topics should include:');
   console.log('   - bagcounter/status');
   console.log('   - bagcounter/count');  
   console.log('   - bagcounter/ir_command');
   console.log('   - bagcounter/alerts');
   
   if (mqttClient) {
-    console.log('MQTT Client state:', mqttClient.connected ? 'Connected' : 'Disconnected');
+    console.log('Realtime client state:', mqttClient.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected');
   } else {
-    console.log('MQTT Client not initialized');
+    console.log('Realtime client not initialized');
   }
 };
 
@@ -6689,17 +6607,16 @@ window.testIRCommand = function() {
 };
 
 window.debugMQTTConnection = function() {
-  console.log(' MQTT Connection Debug:');
+  console.log('Realtime WebSocket Debug:');
   console.log('   Connected:', mqttConnected);
   console.log('   Client exists:', !!mqttClient);
-  console.log('   Client connected:', mqttClient ? mqttClient.connected : 'N/A');
+  console.log('   Client readyState:', mqttClient ? mqttClient.readyState : 'N/A');
   console.log('   Last MQTT update:', lastMqttUpdate ? new Date(lastMqttUpdate) : 'Never');
   
   if (mqttClient) {
     console.log('   Client details:', {
-      clientId: mqttClient.options ? mqttClient.options.clientId : 'N/A',
-      host: mqttClient.options ? mqttClient.options.hostname : 'N/A',
-      port: mqttClient.options ? mqttClient.options.port : 'N/A'
+      url: mqttClient.url || 'N/A',
+      protocol: mqttClient.protocol || 'N/A'
     });
     
     console.log('Testing manual IR command simulation...');
@@ -6716,7 +6633,7 @@ window.debugMQTTConnection = function() {
     handleMQTTMessage('bagcounter/ir_command', testIRData);
     console.log('Manual IR command test completed');
   } else {
-    console.log('MQTT Client not initialized');
+    console.log('Realtime client not initialized');
   }
 };
 

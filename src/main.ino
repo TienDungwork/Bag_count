@@ -6,6 +6,7 @@
 #include "esp_task_wdt.h"
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <WebServer_ESP32_SC_W5500.h>
+#include <AsyncWebServer_ESP32_SC_W5500.h>
 
 // Force use ESP32 WiFi library
 #ifdef ARDUINO_ARCH_ESP32
@@ -79,6 +80,7 @@ String mqtt_server_backup = "test.mosquitto.org";
 int mqtt_port = 1883;
 int mqtt_websocket_port = 8080;  // port MQTT
 bool mqtt_use_backup = false;
+const uint16_t REALTIME_WS_PORT = 81;
 
 // MQTT Broker 2 config (Server anh Dũng)
 String mqtt_server2 = "103.57.220.146";  // MQTT Broker 2
@@ -121,6 +123,8 @@ IPAddress primaryDNS(8, 8, 8, 8);         // DNS
 IPAddress secondaryDNS(8, 8, 4, 4);     // DNS phụ (Google DNS)
 
 WebServer server(80);
+AsyncWebServer realtimeServer(REALTIME_WS_PORT);
+AsyncWebSocket realtimeSocket("/ws");
 WiFiClient ethClient;
 PubSubClient mqtt(ethClient);
 
@@ -313,6 +317,12 @@ void updateDoneLED();
 void updateDisplay();
 void updateCount();
 String getTimeStr();
+void setupRealtimeServer();
+void setupRealtimeTransport();
+void onRealtimeSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
+void handleRealtimeMessage(const String& topicStr, const String& message);
+void broadcastRealtimeMessage(const char* topic, const String& payloadJson);
+void sendRealtimeSnapshot(AsyncWebSocketClient *client);
 void showConnectingDisplay();
 void setSystemConnected();
 void saveBagConfigsToFile();
@@ -439,27 +449,7 @@ void handleIRCommand(int button) {
         break;
   }
   
-  
-  // MQTT connection check
-  if (!mqtt.connected()) {
-    String clientId = "ESP32_BagCounter_" + String(WiFi.macAddress());
-    clientId.replace(":", "");
-    String current_broker = mqtt_use_backup ? mqtt_server_backup : mqtt_server;
-    mqtt.setServer(current_broker.c_str(), mqtt_port);
-    
-    if (mqtt.connect(clientId.c_str())) {
-      mqtt.subscribe(TOPIC_CMD_START);
-      mqtt.subscribe(TOPIC_CMD_PAUSE);
-      mqtt.subscribe(TOPIC_CMD_RESET);
-      mqtt.subscribe(TOPIC_CMD_SELECT);
-      mqtt.subscribe(TOPIC_CMD_BATCH);
-      mqtt.subscribe(TOPIC_CONFIG);
-    } else {
-      Serial.println("Failed to reconnect MQTT for IR command");
-    }
-  }
-  
-  // GỬI LỆNH MQTT NHƯ WEB
+  // GỬI LỆNH REALTIME NHƯ WEB
   doc.clear();
   doc["source"] = "IR_REMOTE";
   doc["action"] = action;
@@ -470,14 +460,8 @@ void handleIRCommand(int button) {
   msg = "";
   serializeJson(doc, msg);
   
-  // Gửi thông báo IR command qua topic riêng
-  bool irNotificationSent = mqtt.publish(TOPIC_IR_CMD, msg.c_str(), true);
-  
-  if (irNotificationSent) {
-    Serial.println("IR Command sent to web: " + action);
-  } else {
-    Serial.println("Failed IR ");
-  }
+  broadcastRealtimeMessage(TOPIC_IR_CMD, msg);
+  Serial.println("IR Command sent to realtime web: " + action);
   
   updateDisplay();
   publishStatusMQTT();
@@ -486,7 +470,7 @@ void handleIRCommand(int button) {
   lastIRTimestamp = millis();
   hasNewIRCommand = true;
 
-  Serial.println("IR Command " + action + " sent to web via MQTT");
+  Serial.println("IR Command " + action + " sent to web via WebSocket");
 }
 
 // Load thông tin đơn hàng hiện tại để hiển thị trên LED khi IR Remote START
@@ -1602,77 +1586,18 @@ void setupNetwork() {
   Serial.println("Using WiFi AP mode for configuration");
 }
 
-void setupMQTT() {
-  // Thử broker chính trước
-  String current_broker = mqtt_use_backup ? mqtt_server_backup : mqtt_server;
-  
-  mqtt.setServer(current_broker.c_str(), mqtt_port);
-  mqtt.setCallback(onMqttMessage);
-  // mqtt.setBufferSize(512);   // Không có trong bản PubSubClient cũ
-  // mqtt.setKeepAlive(30);
-  
-  // Tạo client ID unique
-  String clientId = "ESP32_BagCounter_" + String(WiFi.macAddress());
-  clientId.replace(":", "");
-  
-  Serial.print("Connecting to MQTT broker: ");
-  Serial.println(current_broker);
-  
-  // Thử kết nối
-  if (mqtt.connect(clientId.c_str())) {
-    Serial.println("MQTT connected successfully!");
-    Serial.println("Client ID: " + clientId);
-    
-    // Subscribe các topic
-    mqtt.subscribe(TOPIC_CMD_START);
-    mqtt.subscribe(TOPIC_CMD_PAUSE);
-    mqtt.subscribe(TOPIC_CMD_RESET);
-    mqtt.subscribe(TOPIC_CMD_SELECT);
-    mqtt.subscribe(TOPIC_CMD_BATCH);
-    mqtt.subscribe(TOPIC_CONFIG);
-    
-    publishHeartbeat();
-    
-    // Gửi test message để notify web ESP32 sẵn sàng nhận IR commands
-    DynamicJsonDocument testDoc(256);
-    testDoc["source"] = "SYSTEM";
-    testDoc["action"] = "MQTT_READY";
-    testDoc["status"] = "ESP32_ONLINE";
-    testDoc["timestamp"] = millis();
-    String testMsg;
-    serializeJson(testDoc, testMsg);
-    mqtt.publish(TOPIC_IR_CMD, testMsg.c_str(), true);
-    
-  } else {
-    int errorCode = mqtt.state();
-    Serial.print("MQTT connection failed, rc=");
-    Serial.println(errorCode);
-    
-    // Giải thích lỗi cụ thể
-    switch(errorCode) {
-      case -4: Serial.println("Lỗi: Timeout kết nối"); break;
-      case -3: Serial.println("Lỗi: Mất kết nối"); break;
-      case -2: Serial.println("Lỗi: Broker từ chối kết nối"); break;
-      case -1: Serial.println("Lỗi: Protocol version sai"); break;
-      case 1: Serial.println("Lỗi: Protocol version không được hỗ trợ"); break;
-      case 2: Serial.println("Lỗi: Client ID bị từ chối"); break;
-      case 3: Serial.println("Lỗi: Server không khả dụng"); break;
-      case 4: Serial.println("Lỗi: Username/password sai"); break;
-      case 5: Serial.println("Lỗi: Không được ủy quyền"); break;
-      default: Serial.println("Lỗi: Không xác định"); break;
-    }
-    
-    // Thử broker backup nếu broker chính failed
-    if (!mqtt_use_backup && errorCode == -2) {
-      Serial.println("Thử backup broker: " + String(mqtt_server_backup));
-      mqtt_use_backup = true;
-      delay(1000);
-      setupMQTT(); // đệ quy
-    }
-    
-    Serial.println("Will retry broker...");
-  }
-  
+void setupRealtimeTransport() {
+  setupRealtimeServer();
+
+  DynamicJsonDocument readyDoc(256);
+  readyDoc["source"] = "SYSTEM";
+  readyDoc["action"] = "MQTT_READY";
+  readyDoc["status"] = "ESP32_ONLINE";
+  readyDoc["timestamp"] = millis();
+  String readyMessage;
+  serializeJson(readyDoc, readyMessage);
+  broadcastRealtimeMessage(TOPIC_IR_CMD, readyMessage);
+
   // CHỈ setup MQTT2 khi có Internet connection và KeyLogin được cấu hình
   if (currentNetworkMode != WIFI_AP_MODE && mqtt2_password.length() > 0) {
     Serial.println("Setting up MQTT2");
@@ -1868,16 +1793,92 @@ String getTimeStr() {
   return String(buf);
 }
 
-//----------------------------------------MQTT Callback & Publish Functions
-void onMqttMessage(char* topic, byte* payload, unsigned int length) {
-  // Convert payload to string
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
+void broadcastRealtimeMessage(const char* topic, const String& payloadJson) {
+  if (realtimeSocket.count() == 0) {
+    return;
   }
-  
-  String topicStr = String(topic);
-  Serial.println("MQTT Message received:");
+
+  String message = "{\"topic\":\"" + String(topic) + "\",\"data\":" + payloadJson + "}";
+  realtimeSocket.textAll(message);
+}
+
+void sendRealtimeSnapshot(AsyncWebSocketClient *client) {
+  if (client == nullptr || !client->canSend()) {
+    return;
+  }
+
+  publishStatusMQTT();
+  publishSensorData();
+  publishHeartbeat();
+}
+
+void onRealtimeSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  (void)server;
+
+  if (type == WS_EVT_CONNECT) {
+    Serial.println("Realtime WebSocket client connected: " + String(client->id()));
+    sendRealtimeSnapshot(client);
+    return;
+  }
+
+  if (type == WS_EVT_DISCONNECT) {
+    Serial.println("Realtime WebSocket client disconnected: " + String(client->id()));
+    return;
+  }
+
+  if (type == WS_EVT_ERROR) {
+    Serial.println("Realtime WebSocket error from client: " + String(client->id()));
+    return;
+  }
+
+  if (type != WS_EVT_DATA) {
+    return;
+  }
+
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info == nullptr || info->opcode != WS_TEXT || !info->final || info->index != 0 || info->len != len) {
+    Serial.println("Realtime WebSocket fragmented or non-text frame ignored");
+    return;
+  }
+
+  String frame;
+  frame.reserve(len);
+  for (size_t i = 0; i < len; i++) {
+    frame += (char)data[i];
+  }
+
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, frame);
+  if (error) {
+    Serial.println("Realtime WebSocket JSON parse error: " + String(error.c_str()));
+    return;
+  }
+
+  String topicStr = doc["topic"] | "";
+  if (topicStr.length() == 0) {
+    Serial.println("Realtime WebSocket message missing topic");
+    return;
+  }
+
+  String payload = "{}";
+  if (!doc["data"].isNull()) {
+    payload = "";
+    serializeJson(doc["data"], payload);
+  }
+
+  handleRealtimeMessage(topicStr, payload);
+}
+
+void setupRealtimeServer() {
+  Serial.println("Starting realtime WebSocket server on port " + String(REALTIME_WS_PORT));
+  realtimeSocket.onEvent(onRealtimeSocketEvent);
+  realtimeServer.addHandler(&realtimeSocket);
+  realtimeServer.begin();
+}
+
+//----------------------------------------Realtime Callback & Publish Functions
+void handleRealtimeMessage(const String& topicStr, const String& message) {
+  Serial.println("Realtime message received:");
   Serial.println("  Topic: " + topicStr);
   Serial.println("  Message: " + message);
   
@@ -2104,15 +2105,6 @@ void publishStatusMQTT() {
   }
   lastPublish = millis();
   
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt.connected()) {
-    if (currentNetworkMode == WIFI_AP_MODE) {
-      return;
-    } else {
-      Serial.println("MQTT not connected - cannot publish status");
-      return;
-    }
-  }
-  
   DynamicJsonDocument doc(512);
   doc["deviceId"] = conveyorName;   
   doc["status"] = currentSystemStatus; 
@@ -2139,43 +2131,18 @@ void publishStatusMQTT() {
   
   String message;
   serializeJson(doc, message);
-  
-  //Serial.print("Publishing status MQTT (");
-  //Serial.print(message.length());
-  //Serial.print(" bytes): ");
-  //Serial.println(message);
-  
-  bool published = mqtt.publish(TOPIC_STATUS, message.c_str());
-  if (published) {
-  } else {
-    Serial.print("Failed to publish status to MQTT. State: ");
-    Serial.println(mqtt.state());
-  }
+
+  broadcastRealtimeMessage(TOPIC_STATUS, message);
 }
 
 void publishCountUpdate() {
-  Serial.println("DEBUG publishCountUpdate: starting...");
-  
-  if (currentNetworkMode == WIFI_AP_MODE) {
-    Serial.println("DEBUG publishCountUpdate: skipped - AP mode");
-    return;
-  }
-  
-  if (!mqtt.connected()) {
-    Serial.println("DEBUG publishCountUpdate: skipped - MQTT not connected");
-    return;
-  }
-  
   // Throttle count updates để tránh spam MQTT
   unsigned long now = millis();
   if (now - lastCountPublish < COUNT_PUBLISH_THROTTLE) {
-    Serial.println("DEBUG publishCountUpdate: skipped - throttled");
     return;
   }
   lastCountPublish = now;
-  
-  Serial.println("DEBUG publishCountUpdate: preparing message...");
-  
+
   DynamicJsonDocument doc(256);
   doc["deviceId"] = conveyorName;
   doc["count"] = totalCount;
@@ -2183,24 +2150,15 @@ void publishCountUpdate() {
   doc["type"] = bagType;
   doc["productCode"] = productCode;
   doc["timestamp"] = getTimeStr();
-  doc["progress"] = (float)totalCount / targetCount * 100;
+  doc["progress"] = targetCount > 0 ? ((float)totalCount / targetCount) * 100 : 0;
   
   String message;
   serializeJson(doc, message);
-  
-  Serial.println("DEBUG publishCountUpdate: message = " + message);
-  
-  bool published = mqtt.publish(TOPIC_COUNT, message.c_str());
-  if (published) {
-    Serial.println("Count update published: " + String(totalCount) + "/" + String(targetCount));
-  } else {
-    Serial.println("Count update publish FAILED!");
-  }
+
+  broadcastRealtimeMessage(TOPIC_COUNT, message);
 }
 
 void publishAlert(String alertType, String message) {
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt.connected()) return;
-  
   DynamicJsonDocument doc(256);
   doc["deviceId"] = conveyorName;
   doc["alertType"] = alertType; // "WARNING", "COMPLETED", "ERROR"
@@ -2212,14 +2170,12 @@ void publishAlert(String alertType, String message) {
   
   String alertMessage;
   serializeJson(doc, alertMessage);
-  
-  mqtt.publish(TOPIC_ALERTS, alertMessage.c_str());
+
+  broadcastRealtimeMessage(TOPIC_ALERTS, alertMessage);
   Serial.println("Alert published: " + alertType + " - " + message);
 }
 
 void publishSensorData() {
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt.connected()) return;
-  
   DynamicJsonDocument doc(256);
   doc["deviceId"] = conveyorName;
   doc["sensorTriggered"] = isCountingEnabled;
@@ -2231,32 +2187,28 @@ void publishSensorData() {
   
   String message;
   serializeJson(doc, message);
-  
-  mqtt.publish(TOPIC_SENSOR, message.c_str());
+
+  broadcastRealtimeMessage(TOPIC_SENSOR, message);
 }
 
 void publishHeartbeat() {
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt.connected()) return;
-  
   DynamicJsonDocument doc(256);
   doc["deviceId"] = conveyorName;
   doc["status"] = "ONLINE";
   doc["uptime"] = millis() / 1000;
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["wifiRSSI"] = WiFi.RSSI();
-  doc["ipAddress"] = currentNetworkMode == ETHERNET_MODE ? ETH.localIP().toString() : WiFi.localIP().toString();
+  doc["ipAddress"] = currentNetworkMode == ETHERNET_MODE ? ETH.localIP().toString() :
+                     (currentNetworkMode == WIFI_AP_MODE ? WiFi.softAPIP().toString() : WiFi.localIP().toString());
   doc["timestamp"] = getTimeStr();
   
   String message;
   serializeJson(doc, message);
-  
-  mqtt.publish(TOPIC_HEARTBEAT, message.c_str());
-//   Serial.println("Heartbeat published");
+
+  broadcastRealtimeMessage(TOPIC_HEARTBEAT, message);
 }
 
 void publishBagConfigs() {
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt.connected()) return;
-  
   DynamicJsonDocument doc(2048);
   JsonArray orders = doc.createNestedArray("orders");
   
@@ -2288,8 +2240,8 @@ void publishBagConfigs() {
   String message;
   serializeJson(doc, message);
   
-  mqtt.publish("bagcounter/orders", message.c_str());
-  Serial.println("Orders configuration published to web");
+  broadcastRealtimeMessage("bagcounter/orders", message);
+  Serial.println("Orders configuration published to realtime web clients");
 }
 
 //----------------------------------------Web server API
@@ -2472,7 +2424,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["ipAddress"] = currentNetworkMode == ETHERNET_MODE ? ETH.localIP().toString() : WiFi.localIP().toString();
     doc["uptime"] = millis() / 1000;
     doc["freeHeap"] = ESP.getFreeHeap();
-    doc["mqttConnected"] = mqtt.connected();
+    doc["realtimeConnected"] = realtimeSocket.count() > 0;
     
     // LED states
     doc["startLedOn"] = startLedOn;
@@ -3145,7 +3097,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("   isTriggerEnabled: " + String(isTriggerEnabled));
         Serial.println("   isCountingEnabled: " + String(isCountingEnabled));
         Serial.println("   totalCount: " + String(totalCount));
-        Serial.println("   MQTT connected: " + String(mqtt.connected()));
+        Serial.println("   Realtime clients: " + String(realtimeSocket.count()));
         server.send(200, "text/plain", "TEST OK - Check Serial Monitor for details");
         return;
       } else if (cmd == "clear_batch") {
@@ -3772,6 +3724,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["mqttPort"] = mqtt_port;
     doc["mqttWebSocketPort"] = mqtt_websocket_port;
     doc["_mqttUsingBackup"] = mqtt_use_backup;
+    doc["realtimePort"] = REALTIME_WS_PORT;
+    doc["realtimePath"] = "/ws";
     
     // MQTT2 settings (Server anh Dũng)
     doc["mqtt2Server"] = mqtt_server2;
@@ -4027,18 +3981,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("  - Ethernet IP: " + ethIP);
       }
       
-      // Reconnect MQTT if needed
       if (mqttNeedReconnect) {
-        Serial.println("MQTT configuration changed, reconnecting...");
-        Serial.println("  New primary broker: " + mqtt_server + ":" + String(mqtt_port));
-        Serial.println("  New backup broker: " + mqtt_server_backup + ":" + String(mqtt_port));
-        Serial.println("  Using backup mode: " + String(mqtt_use_backup ? "true" : "false"));
-        
-        mqtt.disconnect();
-        String current_broker = mqtt_use_backup ? mqtt_server_backup : mqtt_server;
-        mqtt.setServer(current_broker.c_str(), mqtt_port);
-        Serial.println("  Connecting to: " + current_broker);
-        // Will reconnect in main loop
+        Serial.println("Internal MQTT settings are deprecated - realtime now uses WebSocket on port " + String(REALTIME_WS_PORT));
       }
       
       // Reconnect MQTT2 if needed - CHỈ KHI CÓ INTERNET
@@ -4409,9 +4353,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
     DynamicJsonDocument doc(512);
-    doc["connected"] = mqtt.connected();
-    doc["server"] = mqtt_server;
-    doc["client_id"] = "ESP32_BagCounter_" + String(WiFi.macAddress()).substring(0, 8);
+    doc["connected"] = realtimeSocket.count() > 0;
+    doc["transport"] = "websocket";
+    doc["port"] = REALTIME_WS_PORT;
+    doc["path"] = "/ws";
     doc["last_publish"] = lastMqttPublish;
     doc["last_heartbeat"] = lastHeartbeat;
     
@@ -4449,7 +4394,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       String message = doc["message"];
       
       if (topic.length() > 0 && message.length() > 0) {
-        bool success = mqtt.publish(topic.c_str(), message.c_str());
+        broadcastRealtimeMessage(topic.c_str(), message);
+        bool success = true;
         
         DynamicJsonDocument response(256);
         response["success"] = success;
@@ -4481,7 +4427,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     DynamicJsonDocument response(256);
     response["success"] = true;
-    response["message"] = "All MQTT topics published";
+    response["message"] = "All realtime topics published";
     response["timestamp"] = millis();
     
     String out;
@@ -5251,14 +5197,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     ethernetMAC = String(ethMacStr);
     
-    // Tạo MQTT Topic từ MAC
-    String mqttTopic = "bagcounter/" + macAddress;
-    mqttTopic.replace(":", "");  // Bỏ dấu :
-    mqttTopic.toLowerCase();
+    String realtimeHost = (currentNetworkMode == ETHERNET_MODE) ? local_IP.toString() :
+                          (currentNetworkMode == WIFI_AP_MODE ? WiFi.softAPIP().toString() : WiFi.localIP().toString());
+    String realtimeEndpoint = "ws://" + realtimeHost + ":" + String(REALTIME_WS_PORT) + "/ws";
     
     doc["deviceMAC"] = macAddress;  // ESP32 WiFi MAC (unique)
     doc["ethernetMAC"] = ethernetMAC;  // W5500 Ethernet MAC (fixed)
-    doc["mqttTopic"] = mqttTopic;
+    doc["realtimeEndpoint"] = realtimeEndpoint;
     doc["conveyorName"] = conveyorName;
     doc["firmwareVersion"] = "1.0.0";
     doc["networkMode"] = (currentNetworkMode == ETHERNET_MODE) ? "Ethernet" : 
@@ -5276,7 +5221,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     Serial.println("Device info sent:");
     Serial.println("   - ESP32 WiFi MAC: " + macAddress);
     Serial.println("   - W5500 Ethernet MAC: " + ethernetMAC);
-    Serial.println("   - MQTT Topic: " + mqttTopic);
+    Serial.println("   - Realtime endpoint: " + realtimeEndpoint);
     Serial.println("   - Active Interface: " + doc["activeInterface"].as<String>());
   });
 
@@ -6282,14 +6227,14 @@ void updateCount(int bagCount) {
         saveOrdersToFile();
       }
       
-      // Legacy MQTT (giữ lại để tương thích)
+      // Realtime status broadcast để web đồng bộ ngay sau khi chuyển đơn
       DynamicJsonDocument doc(256);
       doc["count"] = totalCount;
       doc["time"] = currentTime;
       doc["type"] = bagType;
       String msg;
       serializeJson(doc, msg);
-      mqtt.publish("bagcounter/status", msg.c_str());
+      broadcastRealtimeMessage("bagcounter/status", msg);
     }
   }
 }
@@ -6638,20 +6583,16 @@ void setup() {
   
   // BƯỚC 6: Khởi tạo network và services
   Serial.println("Starting network setup...");
+  ESP32_W5500_onEvent();
   
   setupNetwork();
   Serial.println("Network initialized");
   delay(1000); // Chờ network ổn định
   
-  // Chỉ setup MQTT khi có kết nối Internet (không phải AP mode)
-  if (currentNetworkMode != WIFI_AP_MODE) {
-    Serial.println("Starting MQTT setup...");
-    setupMQTT();
-    Serial.println("MQTT initialized");
-    delay(1000); // Chờ MQTT ổn định
-  } else {
-    Serial.println("kipping MQTT setup (AP mode - no Internet connection)");
-  }
+  Serial.println("Starting realtime WebSocket setup...");
+  setupRealtimeTransport();
+  Serial.println("Realtime WebSocket initialized");
+  delay(1000);
   
   // Chỉ setup Time sync khi có kết nối Internet
   if (currentNetworkMode != WIFI_AP_MODE) {
@@ -6988,89 +6929,22 @@ void loop() {
     Serial.println(startTimeStr);
   }
   
-  // 📡 MQTT Management với Smart Reconnection (chỉ khi không ở AP mode)
-  if (currentNetworkMode != WIFI_AP_MODE && !mqtt.connected()) {
-    static unsigned long lastReconnectAttempt = 0;
-    static int reconnectAttempts = 0;
-    static bool mqttErrorLogged = false;
-    
-    // Thời gian chờ động: càng thất bại nhiều, càng chờ lâu
-    unsigned long reconnectInterval = 5000 + (reconnectAttempts * 2000); // 5s, 7s, 9s, 11s...
-    if (reconnectInterval > 30000) reconnectInterval = 30000; // Tối đa 30s
-    
-    if (millis() - lastReconnectAttempt > reconnectInterval) {
-      lastReconnectAttempt = millis();
-      
-      // Chỉ log chi tiết lần đầu hoặc mỗi 10 lần thất bại
-      if (!mqttErrorLogged || reconnectAttempts % 10 == 0) {
-        Serial.println("Attempting MQTT reconnection... (Attempt " + String(reconnectAttempts + 1) + ")");
-        if (reconnectAttempts > 0) {
-          Serial.println("Using interval: " + String(reconnectInterval/1000) + "s");
-        }
-        mqttErrorLogged = true;
-      }
-      
-      bool connected = false;
-      String current_broker = mqtt_use_backup ? mqtt_server_backup : mqtt_server;
-      mqtt.setServer(current_broker.c_str(), mqtt_port);
-      
-      String clientId = "ESP32_BagCounter_" + String(WiFi.macAddress());
-      clientId.replace(":", "");
-      
-      if (mqtt.connect(clientId.c_str())) {
-        Serial.println("MQTT reconnected successfully to: " + current_broker);
-        reconnectAttempts = 0; // Reset counter
-        mqttErrorLogged = false;
-        
-        // Re-subscribe
-        mqtt.subscribe(TOPIC_CMD_START);
-        mqtt.subscribe(TOPIC_CMD_PAUSE);
-        mqtt.subscribe(TOPIC_CMD_RESET);
-        mqtt.subscribe(TOPIC_CMD_SELECT);
-        mqtt.subscribe(TOPIC_CMD_BATCH);
-        mqtt.subscribe(TOPIC_CONFIG);
-        publishHeartbeat();
-        
-      } else {
-        reconnectAttempts++;
-        if (reconnectAttempts == 1 || reconnectAttempts % 5 == 0) {
-          Serial.println("MQTT reconnection failed (attempt " + String(reconnectAttempts) + ")");
-        }
-        
-        // Thử backup broker sau 3 lần thất bại
-        if (reconnectAttempts == 3 && !mqtt_use_backup) {
-          Serial.println("Switching to backup broker: " + String(mqtt_server_backup));
-          mqtt_use_backup = true;
-          reconnectAttempts = 0; // Reset để thử backup
-        }
-        // Quay lại broker chính sau 10 lần thất bại với backup
-        else if (reconnectAttempts >= 10 && mqtt_use_backup) {
-          Serial.println("Switching back to main broker: " + String(mqtt_server));
-          mqtt_use_backup = false;
-          reconnectAttempts = 0;
-        }
-      }
-    }
-  } else if (currentNetworkMode != WIFI_AP_MODE && mqtt.connected()) {
-    // MQTT connected - handle messages
-    mqtt.loop();
+  realtimeSocket.cleanupClients();
 
-    // Publish periodic updates
-    if (millis() - lastMqttPublish > MQTT_PUBLISH_INTERVAL) {
-      publishStatusMQTT();
+  // Realtime WebSocket publish hoạt động cho cả Ethernet, WiFi STA và AP mode
+  if (millis() - lastMqttPublish > MQTT_PUBLISH_INTERVAL) {
+    publishStatusMQTT();
 
-      // Publish sensor data nếu đang hoạt động
-      if (isCountingEnabled || isTriggerEnabled)
-        publishSensorData();
+    if (isCountingEnabled || isTriggerEnabled) {
+      publishSensorData();
+    }
 
-      lastMqttPublish = millis();
-    }
-    
-    // Publish heartbeat
-    if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
-      publishHeartbeat();
-      lastHeartbeat = millis();
-    }
+    lastMqttPublish = millis();
+  }
+
+  if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    publishHeartbeat();
+    lastHeartbeat = millis();
   }
   
   // Handle MQTT2 Client (Server anh Dũng) - CHỈ KHI CÓ INTERNET VÀ KEYLOGIN

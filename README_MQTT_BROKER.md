@@ -1,35 +1,24 @@
-# Hướng dẫn cài đặt Mosquitto MQTT Broker (Windows)
+# Ghi chú về MQTT Broker nội bộ
 
-## 1. Cài đặt Mosquitto
-- Tải Mosquitto từ trang chính thức: https://mosquitto.org/download/
-- Tải mosquitto-2.0.22-install-windows-x64.exe
-- Cài đặt vào máy (ví dụ: `C:\Programs\mosquitto`).
+Tài liệu này được giữ lại để tránh nhầm lẫn với các phiên bản cũ của dự án.
 
-## 2. Chỉnh sửa file cấu hình `mosquitto.conf` nên mở bằng notepad với run as administrator
-- Đường dẫn ví dụ: `C:\Programs\mosquitto\mosquitto.conf`
-- Thêm nội dung sau vào cuối file:
+## Trạng thái hiện tại
 
-```
-listener 1883
-protocol mqtt
+- Giao tiếp nội bộ giữa `ESP32 <-> web UI` đã chuyển sang **WebSocket trực tiếp**.
+- Web interface kết nối thẳng tới endpoint realtime của ESP32:
+  - Port: `81`
+  - Path: `/ws`
+- **Không còn cần Mosquitto hoặc MQTT broker nội bộ** để xem số đếm realtime, heartbeat, trạng thái cảm biến hoặc gửi lệnh Start/Pause/Reset từ giao diện web.
 
-listener 8080
-protocol websockets
+## Phần MQTT còn lại
 
-allow_anonymous true
-```
+- `MQTT2` vẫn được giữ nguyên để gửi báo cáo hoàn thành đơn hàng ra server ngoài.
+- Luồng này dùng các trường cấu hình:
+  - `mqtt2Server`
+  - `mqtt2Port`
+  - `mqtt2Username`
+  - `mqtt2Password`
 
-## 3. Khởi động Mosquitto với file cấu hình
-- Mở PowerShell hoặc Command Prompt với run as administrator.
-- Chạy lệnh sau (ví dụ):
+## Khi nào mới cần MQTT broker?
 
-```
-mosquitto -v -c "C:\Programs\mosquitto\mosquitto.conf".
-```
-## 4.Nếu có lỗi cài PATH cho mosquitto
-- Mở Control Panel → System → Advanced system settings
-- Chọn Environment Variables...
-- Trong mục “System variables”, tìm biến Path → chọn Edit
-- Thêm dòng: C:\Programs\mosquitto\
-- (hoặc thư mục thực tế chứa mosquitto.exe)
-- Nhấn OK để lưu lại
+Chỉ cần nếu bạn chủ động khôi phục lại kiến trúc cũ hoặc tích hợp thêm một luồng MQTT mới ngoài phạm vi hiện tại.
