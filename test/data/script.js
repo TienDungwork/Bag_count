@@ -31,6 +31,12 @@ let mqttReconnectTimer = null;
 const REALTIME_WS_PORT = 81;
 const REALTIME_WS_PATH = '/ws';
 
+function buildDefaultRealtimeEndpoint() {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = window.location.hostname || settings.ipAddress || '127.0.0.1';
+  return `${protocol}://${host}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
+}
+
 // Device connection monitoring
 let lastHeartbeat = 0;
 let deviceConnected = false;
@@ -5389,7 +5395,7 @@ async function getDeviceInfo() {
       
       const realtimeEndpointField = document.getElementById('realtimeEndpoint');
       if (realtimeEndpointField) {
-        realtimeEndpointField.value = deviceInfo.realtimeEndpoint || `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
+        realtimeEndpointField.value = deviceInfo.realtimeEndpoint || buildDefaultRealtimeEndpoint();
       }
       
       // Update conveyor name if available
@@ -5416,7 +5422,7 @@ async function getDeviceInfo() {
       deviceCodeField.value = 'API không khả dụng - Vui lòng kiểm tra kết nối';
     }
     if (realtimeEndpointField) {
-      realtimeEndpointField.value = `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
+      realtimeEndpointField.value = buildDefaultRealtimeEndpoint();
     }
     
     console.log(' Device info set to default values due to API error');
