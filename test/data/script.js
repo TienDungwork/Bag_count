@@ -1030,6 +1030,10 @@ async function handleCountUpdate(data) {
     console.log('countingState.isActive:', countingState.isActive);
 
     // MQTT-ONLY REAL-TIME COUNT UPDATE - No API fallback to prevent overwrites
+    // Bắt buộc phải có định danh sản phẩm để tránh dính count giữa các đơn
+    if (!data.type && !data.productCode) {
+      return;
+    }
     if (data.count !== undefined) {
     // Tìm đơn hàng đang được ESP32 đếm theo product type/name
     let foundOrder = null;
@@ -4622,6 +4626,12 @@ async function updateStatusFromDevice(data) {
     }
   }
   
+  // KHÓA đường count từ polling khi đang chạy để tránh dính số tổng giữa các đơn.
+  // Khi đang đếm, chỉ nhận count từ realtime (handleCountUpdate) đã match theo product identity.
+  if (countingState.isActive) {
+    return;
+  }
+
   // Update current count if device has new count
   if (data.count !== undefined) {
     const activeBatch = orderBatches.find(b => b.isActive);
