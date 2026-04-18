@@ -4935,7 +4935,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
     if (server.hasArg("plain")) {
-      DynamicJsonDocument doc(2048);
+      DynamicJsonDocument doc(8192);
       DeserializationError error = deserializeJson(doc, server.arg("plain"));
       
       if (error) {
@@ -4948,6 +4948,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       JsonArray selectedOrders = doc["selectedOrders"];
       int selectedCount = doc["selectedCount"] | (int)selectedOrders.size();
       JsonObject firstSelectedOrder = doc["firstSelectedOrder"];
+      JsonArray selectedOrdersDetails = doc["selectedOrdersDetails"];
+      JsonObject activeCountingOrder = doc["activeCountingOrder"];
       
       Serial.println("Updating selected orders for batch: " + batchId);
       Serial.println("Selected orders count: " + String(selectedOrders.size()));
@@ -4988,6 +4990,54 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                 Serial.println("Order ID " + String(orderId) + " (orderNumber=" + String(orderNumber) + ", product=" + productName + ") marked as SELECTED");
               }
             }
+          }
+
+          // Đồng bộ trạng thái chi tiết từng đơn từ web (status/currentCount/productCode)
+          if (!selectedOrdersDetails.isNull() && selectedOrdersDetails.size() > 0) {
+            for (JsonVariant detailVar : selectedOrdersDetails) {
+              JsonObject detail = detailVar.as<JsonObject>();
+              int detailId = detail["id"] | 0;
+              String detailStatus = detail["status"].as<String>();
+              int detailCurrentCount = detail["currentCount"] | 0;
+              String detailProductCode = detail["productCode"].as<String>();
+
+              for (size_t j = 0; j < orders.size(); j++) {
+                JsonObject order = orders[j];
+                if (order["id"] == detailId) {
+                  if (detailStatus.length() > 0) {
+                    order["status"] = detailStatus;
+                  }
+                  order["currentCount"] = detailCurrentCount;
+                  order["executeCount"] = detailCurrentCount;
+
+                  // Ghi productCode phẳng để match ổn định phía web
+                  if (detailProductCode.length() > 0) {
+                    order["productCode"] = detailProductCode;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+
+          // Nếu web đã chỉ ra đơn đang counting, sync context active về ESP32
+          if (!activeCountingOrder.isNull()) {
+            String activeOrderCode = activeCountingOrder["orderCode"].as<String>();
+            String activeProductName = activeCountingOrder["productName"].as<String>();
+            String activeProductCode = activeCountingOrder["productCode"].as<String>();
+            int activeCurrentCount = activeCountingOrder["currentCount"] | 0;
+
+            if (activeProductName.length() > 0) {
+              bagType = activeProductName;
+            }
+            if (activeProductCode.length() > 0) {
+              productCode = activeProductCode;
+            }
+            if (activeOrderCode.length() > 0) {
+              orderCode = activeOrderCode;
+            }
+            totalCount = activeCurrentCount;
+            isLimitReached = false;
           }
           break;
         }

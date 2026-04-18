@@ -2575,9 +2575,10 @@ function selectAllOrders(checked) {
   for (let i = startIndex; i < endIndex; i++) {
     activeBatch.orders[i].selected = checked;
   }
-  // Sẽ gửi khi bắt đầu đếm
+  // Gửi ngay trạng thái chọn/bỏ chọn sang ESP32
   
   saveOrderBatches();
+  sendSelectedOrdersToESP32(activeBatch);
   updateOrderTable();
   updateOverview();
 }
@@ -2660,7 +2661,8 @@ function selectOrder(orderId, checked) {
       });
     }
 
-    // Sẽ gửi khi bắt đầu đếm
+    // Gửi ngay khi có thay đổi tích/bỏ tích để ESP32 luôn biết danh sách hiện tại
+    sendSelectedOrdersToESP32(activeBatch);
     
     saveOrderBatches();
     updateOverview();
@@ -2788,6 +2790,18 @@ async function sendSelectedOrdersToESP32(batch) {
   selectedOrders.sort((a, b) => (a.orderNumber || 0) - (b.orderNumber || 0));
   const selectedOrderIds = selectedOrders.map(o => o.id);
   const firstSelectedOrder = selectedOrders[0] || null;
+  const activeCountingOrder = selectedOrders.find(o => o.status === 'counting') || null;
+  const selectedOrdersDetails = selectedOrders.map(order => ({
+    id: order.id,
+    orderNumber: order.orderNumber || 0,
+    orderCode: order.orderCode || '',
+    productName: order.product?.name || order.productName || '',
+    productCode: order.product?.code || order.productCode || '',
+    quantity: order.quantity || 0,
+    status: order.status || 'waiting',
+    currentCount: Number(order.currentCount || 0),
+    selected: true
+  }));
   
   console.log(`Sending ${selectedOrders.length} selected orders to ESP32:`, selectedOrderIds);
   
@@ -2806,6 +2820,7 @@ async function sendSelectedOrdersToESP32(batch) {
         batchId: batch.id.toString(),
         selectedOrders: selectedOrderIds,
         selectedCount: selectedOrders.length,
+        selectedOrdersDetails,
         firstSelectedOrder: firstSelectedOrder ? {
           id: firstSelectedOrder.id,
           orderNumber: firstSelectedOrder.orderNumber || 0,
@@ -2814,6 +2829,13 @@ async function sendSelectedOrdersToESP32(batch) {
           productName: firstSelectedOrder.product?.name || firstSelectedOrder.productName || '',
           productCode: firstSelectedOrder.product?.code || firstSelectedOrder.productCode || '',
           quantity: firstSelectedOrder.quantity || 0
+        } : null,
+        activeCountingOrder: activeCountingOrder ? {
+          id: activeCountingOrder.id,
+          orderCode: activeCountingOrder.orderCode || '',
+          productName: activeCountingOrder.product?.name || activeCountingOrder.productName || '',
+          productCode: activeCountingOrder.product?.code || activeCountingOrder.productCode || '',
+          currentCount: Number(activeCountingOrder.currentCount || 0)
         } : null
       })
     });
@@ -3149,6 +3171,7 @@ async function pauseCounting() {
       
       // Force save to ESP32
       console.log('Force saving paused orders to ESP32...');
+      await sendSelectedOrdersToESP32(activeBatch);
       await sendOrderBatchesToESP32();
       updateOrderTable();
     }
