@@ -2029,6 +2029,38 @@ function updateBatchPreview() {
   });
 }
 
+// Xóa đơn đã hoàn thành khỏi batch hiện tại (UI + dữ liệu local + đồng bộ thiết bị)
+function removeCompletedOrderFromActiveBatch(completedOrder) {
+  const activeBatch = orderBatches.find(b => b.isActive);
+  if (!activeBatch || !completedOrder) return;
+
+  const beforeCount = Array.isArray(activeBatch.orders) ? activeBatch.orders.length : 0;
+  activeBatch.orders = (activeBatch.orders || []).filter(o => o.id !== completedOrder.id);
+  const afterCount = activeBatch.orders.length;
+
+  // Nếu đang mở cùng batch trong tab "Thêm đơn hàng", xóa luôn khỏi preview list
+  if (currentBatchId && String(currentBatchId) === String(activeBatch.id)) {
+    currentOrderBatch = (currentOrderBatch || []).filter(o => o.id !== completedOrder.id);
+    currentOrderBatch.forEach((order, idx) => {
+      order.orderNumber = idx + 1;
+    });
+    updateBatchPreview();
+  }
+
+  if (beforeCount !== afterCount) {
+    saveOrderBatches();
+    updateBatchSelector();
+    updateCurrentBatchSelect();
+    updateOrderTable();
+    updateOverview();
+
+    // Đồng bộ lại danh sách batch/order lên ESP32 để hai bên nhất quán
+    sendOrderBatchesToESP32().catch(err => {
+      console.error('Sync error after removing completed order:', err);
+    });
+  }
+}
+
 async function saveBatch() {
   const batchName = document.getElementById('batchName').value.trim();
   
@@ -3245,7 +3277,18 @@ function editProduct(index) {
   document.getElementById('productGroup').value = product.group || '';
   document.getElementById('productName').value = product.name;
   document.getElementById('productCode').value = product.code;
-  document.getElementById('unitWeight').value = product.unitWeight;
+  const unitWeightSelect = document.getElementById('unitWeight');
+  if (unitWeightSelect) {
+    const productWeightValue = String(product.unitWeight);
+    const hasOption = Array.from(unitWeightSelect.options).some(opt => opt.value === productWeightValue);
+    if (!hasOption && product.unitWeight > 0) {
+      const customOption = document.createElement('option');
+      customOption.value = productWeightValue;
+      customOption.textContent = `${product.unitWeight} kg (ngoài mốc)`;
+      unitWeightSelect.appendChild(customOption);
+    }
+    unitWeightSelect.value = productWeightValue;
+  }
   
   // Remove the product temporarily for validation
   currentProducts.splice(index, 1);
@@ -4640,6 +4683,14 @@ async function updateStatusFromDevice(data) {
             }
           }, 500);
           
+          // Giữ tham chiếu đơn kế tiếp trước khi xóa đơn hoàn thành khỏi batch
+          const nextOrderRef = (currentOrderIndex < selectedOrders.length - 1)
+            ? selectedOrders[currentOrderIndex + 1]
+            : null;
+
+          // Theo yêu cầu: đơn nào hoàn thành thì xóa khỏi danh sách batch/preview ngay
+          removeCompletedOrderFromActiveBatch(currentOrder);
+
           // KIỂM TRA XEM CÒN ĐƠN HÀNG TIẾP THEO KHÔNG
           if (currentOrderIndex < selectedOrders.length - 1) {
             // VẪN CÒN ĐƠN HÀNG TIẾP THEO 
@@ -4647,7 +4698,14 @@ async function updateStatusFromDevice(data) {
             console.log(`Current order index: ${currentOrderIndex}, total orders: ${selectedOrders.length}`);
             
             // Chuyển đơn tiếp theo sang trạng thái counting
-            const nextOrder = selectedOrders[currentOrderIndex + 1];
+            const nextOrder = nextOrderRef;
+            if (!nextOrder) {
+              // Trường hợp hiếm: dữ liệu thay đổi giữa lúc chuyển đơn
+              saveOrderBatches();
+              updateOrderTable();
+              updateOverview();
+              return;
+            }
             const nextProductName = nextOrder.product?.name || nextOrder.productName;
             console.log(`Next order details:`, {
               index: currentOrderIndex + 1,
@@ -7304,6 +7362,9 @@ function renderWeightDelayRules() {
     `;
     container.appendChild(ruleDiv);
   });
+
+  // Đồng bộ dropdown kg ở form Thêm sản phẩm theo weight-based config
+  updateUnitWeightOptions();
 }
 
 function addWeightDelayRule() {
@@ -7354,6 +7415,33 @@ function loadWeightBasedDelaySettings() {
   
   // Luôn render rules
   renderWeightDelayRules();
+}
+
+// Đồng bộ lựa chọn "Trọng lượng đơn vị (kg)" từ weight-based delay config
+function updateUnitWeightOptions() {
+  const unitWeightSelect = document.getElementById('unitWeight');
+  if (!unitWeightSelect) return;
+
+  const previousValue = unitWeightSelect.value;
+  unitWeightSelect.innerHTML = '<option value="">Chọn mức kg theo cài đặt</option>';
+
+  const rules = Array.isArray(settings.weightDelayRules) ? settings.weightDelayRules : [];
+  const uniqueWeights = [...new Set(rules
+    .map(rule => Number(rule.weight))
+    .filter(weight => !Number.isNaN(weight) && weight > 0)
+  )].sort((a, b) => b - a);
+
+  uniqueWeights.forEach(weight => {
+    const option = document.createElement('option');
+    option.value = String(weight);
+    option.textContent = `${weight} kg`;
+    unitWeightSelect.appendChild(option);
+  });
+
+  // Giữ lại lựa chọn trước đó nếu vẫn còn trong danh sách
+  if (previousValue && uniqueWeights.some(weight => String(weight) === String(previousValue))) {
+    unitWeightSelect.value = previousValue;
+  }
 }
 
 // Sensor Timing Functions

@@ -396,7 +396,9 @@
               
               <div class="form-group">
                 <label for="unitWeight">Trọng lượng đơn vị (kg):</label>
-                <input type="number" id="unitWeight" step="0.1" min="0" placeholder="Nhập trọng lượng 1 đơn vị">
+                <select id="unitWeight" required>
+                  <option value="">Chọn mức kg theo cài đặt</option>
+                </select>
               </div>
               
               <button type="button" class="btn-primary" onclick="addProduct()">
