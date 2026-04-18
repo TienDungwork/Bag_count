@@ -2627,6 +2627,7 @@ function selectOrder(orderId, checked) {
     const product = order.product || currentProducts.find(p => p.name === order.productName);
     const productName = product?.name || order.productName || 'Unknown product';
     const productCode = product?.code || '';
+    const unitWeight = Number(product?.unitWeight || order.product?.unitWeight || order.unitWeight || 0);
     const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
     
     console.log(`Order ${productDisplay} ${checked ? 'selected' : 'deselected'}`);
@@ -2652,6 +2653,7 @@ function selectOrder(orderId, checked) {
         customerName: order.customerName,
         orderCode: order.orderCode,
         target: plannedQuantity,
+        unitWeight: unitWeight,
         warningQuantity: order.warningQuantity || 5, // Sử dụng warningQuantity của đơn hàng
         keepCount: keepExistingCount, // Keep count if order has existing progress
         currentCount: existingCount, // Send existing count to ESP32
@@ -2828,6 +2830,7 @@ async function sendSelectedOrdersToESP32(batch) {
           customerName: firstSelectedOrder.customerName || '',
           productName: firstSelectedOrder.product?.name || firstSelectedOrder.productName || '',
           productCode: firstSelectedOrder.product?.code || firstSelectedOrder.productCode || '',
+          unitWeight: Number(firstSelectedOrder.product?.unitWeight || firstSelectedOrder.unitWeight || 0),
           quantity: firstSelectedOrder.quantity || 0
         } : null,
         activeCountingOrder: activeCountingOrder ? {
@@ -3041,6 +3044,7 @@ async function startCounting() {
   const product = currentOrder.product || currentProducts.find(p => p.name === currentOrder.productName);
   const productName = product?.name || currentOrder.productName;
   const productCode = product?.code || '';
+  const unitWeight = Number(product?.unitWeight || currentOrder.product?.unitWeight || currentOrder.unitWeight || 0);
   const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
 
   // Resume thì giữ đúng số đã tạm dừng
@@ -3087,6 +3091,7 @@ async function startCounting() {
       productName: productName,
       productCode: productCode,
       type: productCode || productName,
+      unitWeight: unitWeight,
       target: currentOrder.quantity,
       warningQuantity: currentOrder.warningQuantity || 5,  // Sử dụng warningQuantity của đơn hàng
       keepCount: isResumeFromPaused, 
@@ -4999,6 +5004,7 @@ async function moveToNextOrder() {
       const nextProduct = nextOrder.product || currentProducts.find(p => p.name === nextOrder.productName);
       const nextProductCode = nextProduct?.code || '';
       const nextProductName = nextProduct?.name || nextOrder.productName || 'Unknown product';
+      const nextUnitWeight = Number(nextProduct?.unitWeight || nextOrder.product?.unitWeight || nextOrder.unitWeight || 0);
       
       await sendESP32Command('set_current_order', {
         orderCode: nextOrder.orderCode,
@@ -5006,6 +5012,7 @@ async function moveToNextOrder() {
         productName: nextProductName,
         productCode: nextProductCode,  // Thêm productCode
         type: nextProductCode || nextProductName,
+        unitWeight: nextUnitWeight,
         target: nextOrder.quantity,
         warningQuantity: nextOrder.warningQuantity || 5,
         orderIndex: countingState.currentOrderIndex,

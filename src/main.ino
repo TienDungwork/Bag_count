@@ -295,6 +295,8 @@ int connectingDots = 0;          // Số dấu chấm cho animation
 DynamicJsonDocument productsData(4096);
 DynamicJsonDocument ordersData(65536); // Tăng chứa nhiều đơn hàng hơn
 bool dataLoaded = false;
+unsigned long lastWeightErrorLogMs = 0;
+float currentOrderUnitWeight = 0.0f;
 
 //----------------------------------------IR Remote variables
 IRrecv irrecv(RECV_PIN);
@@ -2777,6 +2779,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
+        float unitWeight = doc["unitWeight"] | 0.0;
         bool keepCount = doc["keepCount"] | false;
         bool isRunningOrder = doc["isRunning"] | false;
         int existingCount = doc["currentCount"] | 0;  // Nhận currentCount từ web
@@ -2788,6 +2791,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Order Code: " + orderCode);
         Serial.println("Target: " + String(target));
         Serial.println("Warning: " + String(warningQuantity));
+        Serial.println("UnitWeight: " + String(unitWeight, 3));
         Serial.println("Keep Count: " + String(keepCount));
         Serial.println("Existing Count: " + String(existingCount));
         Serial.println("Is Running: " + String(isRunningOrder));
@@ -2800,6 +2804,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target; 
+        currentOrderUnitWeight = unitWeight;
         
         // KHÔNG RESET COUNT NẾU keepCount = true
         if (!keepCount) {
@@ -2906,6 +2911,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
+        float unitWeight = doc["unitWeight"] | 0.0;
         bool keepCount = doc["keepCount"] | false;
         
         Serial.println("Switching to next order:");
@@ -2914,6 +2920,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Customer: " + customerName);
         Serial.println("Order Code: " + orderCode);
         Serial.println("Target: " + String(target));
+        Serial.println("UnitWeight: " + String(unitWeight, 3));
         Serial.println("Keep Count: " + String(keepCount));
         
         // CẬP NHẬT THÔNG TIN ĐƠN HÀNG MỚI
@@ -2924,6 +2931,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target;
+        currentOrderUnitWeight = unitWeight;
         
         // KHÔNG RESET COUNT NẾU keepCount = true (để tiếp tục đếm multi-order)
         if (!keepCount) {
@@ -5700,8 +5708,15 @@ int calculateDynamicBagDetectionDelay() {
     return 2000; // Emergency fallback
   }
   
-  // Tìm trong productsData dựa trên bagType (productName) hoặc productCode
-  for (size_t i = 0; i < productsData.size(); i++) {
+  // Ưu tiên tuyệt đối weight gửi theo đơn hiện tại từ web
+  if (currentOrderUnitWeight > 0.0f) {
+    currentProductWeight = currentOrderUnitWeight;
+    foundProductWeight = true;
+    Serial.println("  ✓ Using unitWeight from current order: " + String(currentProductWeight, 3) + "kg");
+  }
+
+  // Chỉ fallback tra productsData khi payload đơn chưa có unitWeight
+  for (size_t i = 0; i < productsData.size() && !foundProductWeight; i++) {
     JsonObject product = productsData[i];
     String productName = product["name"].as<String>();
     String productCodeCheck = product["code"].as<String>();
@@ -5724,11 +5739,65 @@ int calculateDynamicBagDetectionDelay() {
       }
     }
   }
+
+  // Fallback khi productsData rỗng: lấy unitWeight từ ordersData
+  if (!foundWeight) {
+    for (size_t i = 0; i < ordersData.size() && !foundWeight; i++) {
+      if (!ordersData[i].containsKey("orders")) continue;
+      JsonArray orders = ordersData[i]["orders"];
+      for (size_t j = 0; j < orders.size(); j++) {
+        JsonObject order = orders[j];
+        String orderProductName = order["productName"].as<String>();
+        String orderProductCode = orderProductCodeFromJson(order);
+        bool nameMatched = (!bagType.isEmpty() && orderProductName == bagType);
+        bool codeMatched = (!productCode.isEmpty() && orderProductCode == productCode);
+        if (!nameMatched && !codeMatched) continue;
+
+        if (order.containsKey("product") && order["product"].is<JsonObject>() &&
+            order["product"].containsKey("unitWeight")) {
+          currentProductWeight = order["product"]["unitWeight"].as<float>();
+          foundWeight = currentProductWeight > 0.0f;
+          if (foundWeight) break;
+        }
+      }
+    }
+  }
+
+  // Emergency fallback: nếu productsData rỗng/chưa sync, lấy unitWeight từ ordersData
+  if (!foundProductWeight) {
+    for (size_t i = 0; i < ordersData.size() && !foundProductWeight; i++) {
+      if (!ordersData[i].containsKey("orders")) continue;
+      JsonArray orders = ordersData[i]["orders"];
+      for (size_t j = 0; j < orders.size(); j++) {
+        JsonObject order = orders[j];
+        String orderProductName = order["productName"].as<String>();
+        String orderProductCode = orderProductCodeFromJson(order);
+
+        bool nameMatched = (!bagType.isEmpty() && orderProductName == bagType);
+        bool codeMatched = (!productCode.isEmpty() && orderProductCode == productCode);
+        if (!nameMatched && !codeMatched) continue;
+
+        if (order.containsKey("product") && order["product"].is<JsonObject>() &&
+            order["product"].containsKey("unitWeight")) {
+          currentProductWeight = order["product"]["unitWeight"].as<float>();
+          foundProductWeight = currentProductWeight > 0.0f;
+          if (foundProductWeight) {
+            Serial.println("  ✓ Found unitWeight from ordersData fallback: " + String(currentProductWeight, 3) + "kg");
+            break;
+          }
+        }
+      }
+    }
+  }
   
   // BẮT BUỘC PHẢI CÓ KHỐI LƯỢNG
   if (!foundProductWeight) {
-    Serial.println("ERROR: Product weight NOT FOUND!");
-    Serial.println("   Product: '" + bagType + "' (code: '" + productCode + "')");
+    if (millis() - lastWeightErrorLogMs > 3000) {
+      lastWeightErrorLogMs = millis();
+      Serial.println("ERROR: Product weight NOT FOUND!");
+      Serial.println("   Product: '" + bagType + "' (code: '" + productCode + "')");
+      Serial.println("   Hint: set_current_order must include unitWeight > 0.");
+    }
     return 2000; // Emergency fallback
   }
   
@@ -5796,8 +5865,13 @@ int calculateBagCountFromDuration(unsigned long detectionDuration) {
   // Tìm khối lượng sản phẩm hiện tại và rule tương ứng
   float currentProductWeight = 0.0;
   bool foundWeight = false;
+
+  if (currentOrderUnitWeight > 0.0f) {
+    currentProductWeight = currentOrderUnitWeight;
+    foundWeight = true;
+  }
   
-  for (size_t i = 0; i < productsData.size(); i++) {
+  for (size_t i = 0; i < productsData.size() && !foundWeight; i++) {
     JsonObject product = productsData[i];
     String productName = product["name"].as<String>();
     String productCodeCheck = product["code"].as<String>();
