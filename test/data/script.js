@@ -183,6 +183,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   // showNotification('Ứng dụng đã khởi tạo (MQTT Real-time mode)', 'success');
 });
 
+// Chặn đổi số ngoài ý muốn khi lăn chuột trên input number
+document.addEventListener('wheel', function(e) {
+  const target = e.target;
+  if (target && target.tagName === 'INPUT' && target.type === 'number') {
+    e.preventDefault();
+  }
+}, { passive: false });
+
 // LOAD TẤT CẢ DỮ LIỆU TỪ ESP32 KHI KHỞI ĐỘNG
 async function loadAllDataFromESP32() {
   console.log('Loading all data from ESP32...');
@@ -2549,6 +2557,13 @@ function getCurrentCountFromDevice() {
   return currentDeviceStatus?.count || 0;
 }
 
+function getOrderSavedCount(order) {
+  if (!order) return 0;
+  const currentCount = Number(order.currentCount || 0);
+  const executeCount = Number(order.executeCount || 0);
+  return Math.max(currentCount, executeCount, 0);
+}
+
 function selectOrder(orderId, checked) {
   console.log('selectOrder called:', orderId, checked);
   
@@ -2564,11 +2579,13 @@ function selectOrder(orderId, checked) {
     
     // SAVE CURRENT COUNT WHEN DESELECTING
     if (!checked && order.selected && countingState.isActive) {
-      // Đang deselect một order đang được đếm
-      const currentCount = getCurrentCountFromDevice();
-      if (currentCount > 0) {
-        order.currentCount = currentCount;
-        console.log(`Saved currentCount ${currentCount} for order ${orderId} when deselecting`);
+      // Chỉ lưu tiến độ nếu chính order này đang đếm; không lấy count tổng để tránh dính đơn khác
+      if (order.status === 'counting') {
+        const currentCount = getOrderSavedCount(order);
+        if (currentCount > 0) {
+          order.currentCount = currentCount;
+          console.log(`Saved currentCount ${currentCount} for order ${orderId} when deselecting`);
+        }
       }
     }
     
@@ -2589,7 +2606,7 @@ function selectOrder(orderId, checked) {
       console.log('Sending product info to ESP32:', productDisplay, 'Target:', plannedQuantity);
       
       // CHECK IF ORDER HAS EXISTING COUNT TO PRESERVE
-      const existingCount = order.currentCount || 0;
+      const existingCount = getOrderSavedCount(order);
       const keepExistingCount = existingCount > 0;
       
       console.log(`Order has existing count: ${existingCount}, keepCount: ${keepExistingCount}`);
@@ -2947,10 +2964,18 @@ async function startCounting() {
   
   // Get product info for current order
   const currentOrder = selectedOrders[currentOrderIndex];
+  const resumeCount = getOrderSavedCount(currentOrder);
   const product = currentOrder.product || currentProducts.find(p => p.name === currentOrder.productName);
   const productName = product?.name || currentOrder.productName;
   const productCode = product?.code || '';
   const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
+
+  // Bắt đầu đơn mới thì luôn reset count của chính đơn đó để tránh dính số dư đơn trước
+  if (!isResumeFromPaused) {
+    currentOrder.currentCount = 0;
+  } else {
+    currentOrder.currentCount = resumeCount;
+  }
   
   const batchInfo = {
     totalTarget: totalTarget,
@@ -2988,6 +3013,7 @@ async function startCounting() {
       target: currentOrder.quantity,
       warningQuantity: currentOrder.warningQuantity || 5,  // Sử dụng warningQuantity của đơn hàng
       keepCount: isResumeFromPaused, 
+      currentCount: isResumeFromPaused ? resumeCount : 0,
       isRunning: true   // Đảm bảo ESP32 biết đang chạy
     });
 
@@ -3051,6 +3077,11 @@ async function pauseCounting() {
     console.log('Manually updating order status to paused...');
     const activeBatch = orderBatches.find(b => b.isActive);
     if (activeBatch) {
+      const countingOrder = activeBatch.orders.find(order => order.status === 'counting' && order.selected);
+      if (countingOrder) {
+        countingOrder.currentCount = getOrderSavedCount(countingOrder);
+      }
+
       let pausedCount = 0;
       activeBatch.orders.forEach(order => {
         if (order.status === 'counting') {
@@ -4600,6 +4631,21 @@ async function updateStatusFromDevice(data) {
       
       if (currentOrderIndex >= 0) {
         const currentOrder = selectedOrders[currentOrderIndex];
+        const currentOrderProductName = currentOrder.product?.name || currentOrder.productName || '';
+        const currentOrderProductCode = currentOrder.product?.code || currentOrder.productCode || '';
+        const incomingType = data.type || '';
+        const incomingCode = data.productCode || '';
+        const hasIncomingIdentity = !!(incomingType || incomingCode);
+
+        // Chặn số dư của đơn trước lọt sang đơn hiện tại khi vừa chuyển đơn/bỏ chọn
+        if (hasIncomingIdentity) {
+          const matchesCurrentOrder =
+            (incomingCode && currentOrderProductCode && incomingCode === currentOrderProductCode) ||
+            (incomingType && (incomingType === currentOrderProductName || incomingType === currentOrderProductCode));
+          if (!matchesCurrentOrder) {
+            return;
+          }
+        }
         
         // ESP32 gửi total count tích lũy cho toàn bộ batch
         const totalCountFromDevice = data.count;
