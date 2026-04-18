@@ -6115,6 +6115,11 @@ void updateCount(int bagCount) {
               targetCount = quantity;
               totalCount = 0;  // Reset số đếm về 0
               isLimitReached = false;
+              // Ép trạng thái chạy để đảm bảo đơn tiếp theo đếm thật sự
+              isRunning = true;
+              isTriggerEnabled = true;
+              isCountingEnabled = true;
+              currentSystemStatus = "RUNNING";
               
               foundNextOrder = true;
               
@@ -6161,15 +6166,18 @@ void updateCount(int bagCount) {
           // RESET TRẠNG THÁI SENSOR ĐỂ TRÁNH ĐẾM NHẦM
           sensorHighStartTime = 0;
           lastSensorState = HIGH;
+          sensorState = LOW;
           lastBagTime = 0;
           isBagDetected = false;
           waitingForInterval = false;
           bagStartTime = 0;
+          lastDebounceTime = 0;
           Serial.println("Sensor state cleared");
           
           // Đã tìm thấy đơn tiếp theo - gửi thông tin lên web
           loadCurrentOrderForDisplay();
           publishCountUpdate();
+          publishStatusMQTT();
           publishBagConfigs();
           
           Serial.println("Sent new order info to web interface");
