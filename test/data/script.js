@@ -59,7 +59,7 @@ let sensorTimingData = {
 let settings = {
   conveyorName: 'BT-001',
   location: '',
-  ipAddress: '192.168.1.200',
+  ipAddress: '192.168.1.198',
   gateway: '192.168.1.1',
   subnet: '255.255.255.0',
   sensorDelay: 0,
@@ -747,7 +747,7 @@ async function resetAllDataToDefault() {
         // Reset settings về default
         settings = {
           conveyorName: 'BT-001',
-          ipAddress: '192.168.1.200',
+          ipAddress: '192.168.1.198',
           gateway: '192.168.1.1',
           subnet: '255.255.255.0',
           sensorDelay: 0,
@@ -4109,7 +4109,7 @@ function updateSettingsForm() {
   
   if (conveyorNameEl) conveyorNameEl.value = settings.conveyorName || 'BT-001';
   if (locationEl) locationEl.value = settings.location || '';
-  if (ipAddressEl) ipAddressEl.value = settings.ipAddress || '192.168.1.200';
+  if (ipAddressEl) ipAddressEl.value = settings.ipAddress || '192.168.1.198';
   if (gatewayEl) gatewayEl.value = settings.gateway || '192.168.1.1';
   if (subnetEl) subnetEl.value = settings.subnet || '255.255.255.0';
   if (sensorDelayEl) sensorDelayEl.value = settings.sensorDelay || 0;

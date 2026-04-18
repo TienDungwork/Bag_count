@@ -955,7 +955,7 @@ void createDefaultSettingsFile() {
   DynamicJsonDocument doc(2048);
   
   // Network settings - default values
-  doc["ipAddress"] = "192.168.1.200";
+  doc["ipAddress"] = "192.168.1.198";
   doc["gateway"] = "192.168.1.1";
   doc["subnet"] = "255.255.255.0";
   doc["dns1"] = "8.8.8.8";
