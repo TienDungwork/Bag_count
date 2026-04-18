@@ -1037,14 +1037,18 @@ async function handleCountUpdate(data) {
       for (let i = 0; i < selectedOrders.length; i++) {
         const order = selectedOrders[i];
         
-        // Match theo nhiều cách để đảm bảo tìm đúng
-        const productMatches = (
-          order.productName === data.type || 
-          (order.product && order.product.name === data.type) ||
-          (order.product && order.product.code === data.type) ||
-          (data.productCode && order.product && order.product.code === data.productCode) ||
-          order.status === 'counting'
-        );
+        // Match CHẶT theo productCode/type để tránh dồn số từ đơn trước sang đơn sau
+        const orderProductName = order.product?.name || order.productName || '';
+        const orderProductCode = order.product?.code || order.productCode || '';
+        const incomingType = data.type || '';
+        const incomingCode = data.productCode || '';
+        const hasIncomingIdentity = !!(incomingType || incomingCode);
+        const productMatches = hasIncomingIdentity
+          ? (
+              (incomingCode && orderProductCode && incomingCode === orderProductCode) ||
+              (incomingType && (orderProductName === incomingType || orderProductCode === incomingType))
+            )
+          : (order.status === 'counting');
         
         console.log(`Order ${i+1}: ${order.productName} - status:${order.status} - matches:${productMatches}`);
         
@@ -2974,6 +2978,19 @@ async function startCounting() {
   updateUIForStart();
   
   try {
+    // GỬI THÔNG TIN ĐƠN HÀNG HIỆN TẠI TRƯỚC KHI START
+    // -> tránh mang theo count dư của đơn trước
+    await sendESP32Command('set_current_order', {
+      orderCode: currentOrder.orderCode,
+      customerName: currentOrder.customerName,
+      productName: productName,
+      productCode: productCode,
+      target: currentOrder.quantity,
+      warningQuantity: currentOrder.warningQuantity || 5,  // Sử dụng warningQuantity của đơn hàng
+      keepCount: isResumeFromPaused, 
+      isRunning: true   // Đảm bảo ESP32 biết đang chạy
+    });
+
     // Try MQTT first for real-time commands
     if (mqttConnected && startCountingMQTT()) {
       console.log('START command sent via MQTT');
@@ -2987,18 +3004,6 @@ async function startCounting() {
       await sendESP32Command('start');
       await sendESP32Command('batch_info', batchInfo);
     }
-    
-    // GỬI THÔNG TIN ĐƠN HÀNG HIỆN TẠI ĐỂ ESP32 HIỂN THỊ ĐÚNG TRÊN LED
-    await sendESP32Command('set_current_order', {
-      orderCode: currentOrder.orderCode,
-      customerName: currentOrder.customerName,
-      productName: productName,
-      productCode: productCode,
-      target: currentOrder.quantity,
-      warningQuantity: currentOrder.warningQuantity || 5,  // Sử dụng warningQuantity của đơn hàng
-      keepCount: isResumeFromPaused, 
-      isRunning: true   // Đảm bảo ESP32 biết đang chạy
-    });
     
     if (isResumeFromPaused) {
       //console.log('Sent RESUME command to ESP32 - keepCount: true');
