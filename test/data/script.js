@@ -31,12 +31,6 @@ let mqttReconnectTimer = null;
 const REALTIME_WS_PORT = 81;
 const REALTIME_WS_PATH = '/ws';
 
-function buildDefaultRealtimeEndpoint() {
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const host = window.location.hostname || settings.ipAddress || '127.0.0.1';
-  return `${protocol}://${host}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
-}
-
 // Device connection monitoring
 let lastHeartbeat = 0;
 let deviceConnected = false;
@@ -67,8 +61,6 @@ let settings = {
   autoReset: false,
   brightness: 100,
   relayDelayAfterComplete: 5000,
-  realtimePort: REALTIME_WS_PORT,
-  realtimePath: REALTIME_WS_PATH,
   // Weight-based detection delay configuration - LUÔN BẬT
   weightDelayRules: [
     { weight: 50, delay: 3000 },  // 50kg -> 3000ms
@@ -3928,9 +3920,6 @@ async function loadSettingsFromESP32() {
       if (esp32Settings.autoReset !== undefined) settings.autoReset = esp32Settings.autoReset;
       if (esp32Settings.relayDelayAfterComplete !== undefined) settings.relayDelayAfterComplete = esp32Settings.relayDelayAfterComplete;
       
-      if (esp32Settings.realtimePort !== undefined) settings.realtimePort = esp32Settings.realtimePort;
-      if (esp32Settings.realtimePath !== undefined) settings.realtimePath = esp32Settings.realtimePath;
-      
       // MQTT2 settings (Server báo cáo)
       if (esp32Settings.mqtt2Server !== undefined) settings.mqtt2Server = esp32Settings.mqtt2Server;
       if (esp32Settings.mqtt2Port !== undefined) settings.mqtt2Port = esp32Settings.mqtt2Port;
@@ -3988,14 +3977,6 @@ function updateSettingsForm() {
   if (brightnessEl) brightnessEl.value = settings.brightness || 100;
   if (brightnessValueEl) brightnessValueEl.textContent = (settings.brightness || 100) + '%';
   if (relayDelayEl) relayDelayEl.value = (settings.relayDelayAfterComplete || 5000) / 1000; // Convert ms to seconds
-  
-  const realtimeHostEl = document.getElementById('realtimeHost');
-  const realtimePortEl = document.getElementById('realtimePort');
-  const realtimePathEl = document.getElementById('realtimePath');
-
-  if (realtimeHostEl) realtimeHostEl.value = window.location.hostname || settings.ipAddress || '';
-  if (realtimePortEl) realtimePortEl.value = settings.realtimePort || REALTIME_WS_PORT;
-  if (realtimePathEl) realtimePathEl.value = settings.realtimePath || REALTIME_WS_PATH;
   
   // MQTT2 settings (Server báo cáo)
   const mqtt2ServerEl = document.getElementById('mqtt2Server');
@@ -4121,6 +4102,24 @@ async function sendCommand(command, value = null) {
 // Gửi lệnh điều khiển đến ESP32
 // Biến để tạm thời tắt status polling sau khi gửi command
 let disablePollingUntil = 0;
+
+/** Test từ web: mô phỏng cảm biến encoder (GPIO TRIGGER) — bật cho phép đếm */
+async function testSimulateEncoderSensor() {
+  showNotification('Đang gửi test cảm biến encoder...', 'info');
+  const result = await sendESP32Command('test_simulate_encoder');
+  if (result !== null) {
+    showNotification('Encoder: đã kích hoạt cho phép đếm (test)', 'success');
+  }
+}
+
+/** Test từ web: mô phỏng một lần đếm từ cảm biến đếm bao (T61) */
+async function testSimulateCountSensor() {
+  showNotification('Đang gửi test cảm biến đếm...', 'info');
+  const result = await sendESP32Command('test_simulate_count_sensor', { bagCount: 1 });
+  if (result !== null) {
+    showNotification('Cảm biến đếm: đã cộng 1 bao (test)', 'success');
+  }
+}
 
 async function sendESP32Command(action, data = {}) {
   try {
@@ -5395,7 +5394,7 @@ async function getDeviceInfo() {
       
       const realtimeEndpointField = document.getElementById('realtimeEndpoint');
       if (realtimeEndpointField) {
-        realtimeEndpointField.value = deviceInfo.realtimeEndpoint || buildDefaultRealtimeEndpoint();
+        realtimeEndpointField.value = deviceInfo.realtimeEndpoint || `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
       }
       
       // Update conveyor name if available
@@ -5422,7 +5421,7 @@ async function getDeviceInfo() {
       deviceCodeField.value = 'API không khả dụng - Vui lòng kiểm tra kết nối';
     }
     if (realtimeEndpointField) {
-      realtimeEndpointField.value = buildDefaultRealtimeEndpoint();
+      realtimeEndpointField.value = `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
     }
     
     console.log(' Device info set to default values due to API error');

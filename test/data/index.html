@@ -185,6 +185,23 @@
               Reset
             </button>
           </div>
+
+          <div class="sensor-test-tools" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px dashed #6c757d; border-radius: 6px;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #495057;">
+              <i class="fas fa-flask"></i> Công cụ test cảm biến (thay xung phần cứng khi kiểm tra)
+            </div>
+            <p style="margin: 0 0 10px 0; font-size: 0.9em; color: #6c757d;">
+              Dùng khi đã nhấn <strong>Bắt đầu</strong> trên web. Nút 1 mô phỏng <strong>cảm biến encoder</strong> (cho phép đếm); nút 2 mô phỏng <strong>cảm biến đếm bao</strong> (+1 lần đếm).
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+              <button type="button" class="btn-secondary" onclick="testSimulateEncoderSensor()">
+                <i class="fas fa-cog"></i> Test cảm biến Encoder
+              </button>
+              <button type="button" class="btn-secondary" onclick="testSimulateCountSensor()">
+                <i class="fas fa-bullseye"></i> Test cảm biến đếm (+1 bao)
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

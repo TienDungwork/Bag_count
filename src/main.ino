@@ -3285,6 +3285,36 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"Missing batchId or orderId\"}");
           return;
         }
+      } else if (cmd == "test_simulate_encoder") {
+        // Web: mô phỏng cảm biến encoder (TRIGGER_SENSOR) — bật isCountingEnabled như khi phát hiện vật thể
+        if (!isRunning) {
+          server.send(409, "application/json", "{\"status\":\"Error\",\"message\":\"Chưa bắt đầu — nhấn Bắt đầu trước\"}");
+          return;
+        }
+        isCountingEnabled = true;
+        Serial.println("WEB TEST: test_simulate_encoder -> isCountingEnabled=true");
+        needUpdate = true;
+      } else if (cmd == "test_simulate_count_sensor") {
+        // Web: mô phỏng một lần đếm từ cảm biến đếm bao (SENSOR_PIN / T61)
+        if (!isRunning) {
+          server.send(409, "application/json", "{\"status\":\"Error\",\"message\":\"Chưa bắt đầu — nhấn Bắt đầu trước\"}");
+          return;
+        }
+        if (!isCountingEnabled) {
+          server.send(409, "application/json", "{\"status\":\"Error\",\"message\":\"Chưa bật đếm — thử nút test cảm biến encoder trước\"}");
+          return;
+        }
+        if (isLimitReached) {
+          server.send(409, "application/json", "{\"status\":\"Error\",\"message\":\"Đã đủ target — không đếm thêm\"}");
+          return;
+        }
+        int bagCount = doc["bagCount"] | 1;
+        if (bagCount < 1) bagCount = 1;
+        if (bagCount > 50) bagCount = 50;
+        Serial.println("WEB TEST: test_simulate_count_sensor bagCount=" + String(bagCount));
+        updateCount(bagCount);
+        publishSensorData();
+        needUpdate = true;
       }
     }
     server.send(200, "text/plain", "OK");
