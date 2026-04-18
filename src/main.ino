@@ -279,6 +279,7 @@ int triggerState;
 bool isCountingEnabled = false;  // Biến kiểm soát việc đếm
 bool isTriggerEnabled = false;   // Biến kiểm soát cảm biến khởi động
 bool isCounting = false;    // Biến mới để theo dõi trạng thái đếm
+bool isStartAuthorized = false; // Chỉ cho đếm sau khi nhận START hợp lệ
 
 // Biến trạng thái cho LED
 bool startLedOn = false;  // true = sáng (HIGH), false = tắt (LOW)
@@ -368,6 +369,7 @@ void handleIRCommand(int button) {
       isRunning = true;
       isTriggerEnabled = true;
       isCountingEnabled = true;
+      isStartAuthorized = true;
       currentSystemStatus = "RUNNING";
       isRunning = true;
       isTriggerEnabled = true;
@@ -401,6 +403,7 @@ void handleIRCommand(int button) {
       isRunning = false;
       isTriggerEnabled = false;
       isCountingEnabled = false;
+      isStartAuthorized = false;
       currentSystemStatus = "PAUSE";
       action = "PAUSE";
       
@@ -419,6 +422,7 @@ void handleIRCommand(int button) {
       isRunning = false;
       isTriggerEnabled = false;
       isCountingEnabled = false;
+      isStartAuthorized = false;
       history.clear();
       startTimeStr = "";
       timeWaitingForSync = false;
@@ -549,6 +553,7 @@ void handleWebCommand(int button) {
       isRunning = true;
       isTriggerEnabled = true;
       isCountingEnabled = true;
+      isStartAuthorized = true;
       currentSystemStatus = "RUNNING";
       action = "START";
       
@@ -575,6 +580,7 @@ void handleWebCommand(int button) {
       isRunning = false;
       isTriggerEnabled = false;
       isCountingEnabled = false;
+      isStartAuthorized = false;
       currentSystemStatus = "PAUSE";
       action = "PAUSE";
       
@@ -592,6 +598,7 @@ void handleWebCommand(int button) {
       isRunning = false;
       isTriggerEnabled = false;
       isCountingEnabled = false;
+      isStartAuthorized = false;
       history.clear();
       startTimeStr = "";
       timeWaitingForSync = false;
@@ -2818,6 +2825,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         if (isRunningOrder) {
           isRunning = true;
           isTriggerEnabled = true;
+          isStartAuthorized = true;
           Serial.println("Set running state to RUNNING");
         }
         
@@ -2926,6 +2934,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         // ĐẢM BẢO TRẠNG THÁI ĐANG CHẠY
         isRunning = true;
         isTriggerEnabled = true;
+        isStartAuthorized = true;
         // isCountingEnabled sẽ được set khi cảm biến kích hoạt
         
         // TÌM VÀ CẬP NHẬT BAGCONFIG
@@ -3119,31 +3128,31 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         serializeJson(doc, debugPayload);
         Serial.println(debugPayload);
         
-        int batchId = doc["batchId"] | 0;
-        Serial.println("Extracted batch ID: " + String(batchId));
+        long long batchId = doc["batchId"].as<long long>();
+        Serial.println("Extracted batch ID: " + String((unsigned long long)batchId));
         
         if (batchId > 0) {
-          Serial.println("Processing clear batch for ID: " + String(batchId));
+          Serial.println("Processing clear batch for ID: " + String((unsigned long long)batchId));
           Serial.println("Current ordersData size: " + String(ordersData.size()));
           
           // Debug: Log all existing batch IDs
           Serial.println("Existing batch IDs in ordersData:");
           for (size_t i = 0; i < ordersData.size(); i++) {
-            int existingId = ordersData[i]["id"] | 0;
+            long long existingId = ordersData[i]["id"].as<long long>();
             String existingName = ordersData[i]["name"] | "Unknown";
-            Serial.println("   Batch " + String(i) + ": ID=" + String(existingId) + ", Name=" + existingName);
+            Serial.println("   Batch " + String(i) + ": ID=" + String((unsigned long long)existingId) + ", Name=" + existingName);
           }
           
           // Tìm và xóa batch từ ordersData
           bool found = false;
           for (size_t i = 0; i < ordersData.size(); i++) {
-            int currentBatchId = ordersData[i]["id"] | 0;
+            long long currentBatchId = ordersData[i]["id"].as<long long>();
             if (currentBatchId == batchId) {
               String batchName = ordersData[i]["name"] | "Unknown";
               ordersData.remove(i);
               found = true;
               Serial.println("BATCH FOUND AND REMOVED:");
-              Serial.println("   - Batch ID: " + String(batchId));
+              Serial.println("   - Batch ID: " + String((unsigned long long)batchId));
               Serial.println("   - Batch Name: " + batchName);
               Serial.println("   - Removed from index: " + String(i));
               break;
@@ -3156,7 +3165,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             Serial.println("Orders file updated after batch deletion");
             
             // Reset trạng thái nếu batch đang active
-            if (currentBatchId == String(batchId)) {
+            if (currentBatchId == String((unsigned long long)batchId)) {
               currentBatchId = "";
               batchTotalTarget = 0;
               bagType = "bao";
@@ -3173,16 +3182,16 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             }
             
             Serial.println("Batch cleared successfully from ESP32");
-            server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Batch cleared successfully\",\"batchId\":" + String(batchId) + "}");
+            server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Batch cleared successfully\",\"batchId\":" + String((unsigned long long)batchId) + "}");
           } else {
             Serial.println("BATCH NOT FOUND:");
-            Serial.println("   - Requested batch ID: " + String(batchId));
+            Serial.println("   - Requested batch ID: " + String((unsigned long long)batchId));
             Serial.println("   - Available batches: " + String(ordersData.size()));
-            server.send(404, "application/json", "{\"status\":\"Error\",\"message\":\"Batch not found\",\"batchId\":" + String(batchId) + "}");
+            server.send(404, "application/json", "{\"status\":\"Error\",\"message\":\"Batch not found\",\"batchId\":" + String((unsigned long long)batchId) + "}");
           }
         } else {
-          Serial.println("Invalid batch ID for clear operation: " + String(batchId));
-          server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"Invalid batch ID\",\"received\":" + String(batchId) + "}");
+          Serial.println("Invalid batch ID for clear operation: " + String((unsigned long long)batchId));
+          server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"Invalid batch ID\",\"received\":" + String((unsigned long long)batchId) + "}");
         }
       } else if (cmd == "UPDATE_ORDER") {
         // XỬ LÝ CẬP NHẬT ORDER
@@ -6119,6 +6128,7 @@ void updateCount(int bagCount) {
               isRunning = true;
               isTriggerEnabled = true;
               isCountingEnabled = true;
+              isStartAuthorized = true;
               currentSystemStatus = "RUNNING";
               
               foundNextOrder = true;
@@ -6143,6 +6153,7 @@ void updateCount(int bagCount) {
           isRunning = false;
           isTriggerEnabled = false;
           isCountingEnabled = false;
+          isStartAuthorized = false;
           currentSystemStatus = "RESET";
           
           // Reset count về 0
@@ -6404,6 +6415,9 @@ void updateStartLED() {
     if (millis() - lastButton2Time > button2DebounceTime) {
       // CHỈ TẮT - không toggle
       isRunning = false;
+      isTriggerEnabled = false;
+      isCountingEnabled = false;
+      isStartAuthorized = false;
       currentSystemStatus = "PAUSE";
       action = "PAUSE";
       Serial.println("BUTTON_PIN2 press");
@@ -6811,7 +6825,7 @@ void loop() {
   }
 
   // Chỉ đếm khi được kích hoạt - SỬ DỤNG SETTINGS ĐỒNG BỘ
-  if (isCountingEnabled && isRunning && !isLimitReached) {
+  if (isCountingEnabled && isRunning && isStartAuthorized && !isLimitReached) {
     int reading = digitalRead(SENSOR_PIN);
     
     // Sử dụng sensorDelayMs từ settings thay vì debounceDelay cố định

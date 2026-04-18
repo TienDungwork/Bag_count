@@ -1788,17 +1788,36 @@ function loadBatch() {
       currentOrderBatch = [...batch.orders];
       document.getElementById('batchName').value = batch.name;
       
-      // TỰ ĐIỀN THÔNG TIN từ đơn hàng cuối để dễ thêm đơn mới (trừ mã đơn hàng)
+      // TỰ ĐIỀN THÔNG TIN từ đơn hàng cuối để dễ thêm đơn mới
       if (batch.orders && batch.orders.length > 0) {
         const lastOrder = batch.orders[batch.orders.length - 1];
+        const orderForContact = [...batch.orders].reverse().find(order =>
+          (order && (
+            order.customerName || order.customerPhone || order.phone || order.phoneNumber ||
+            order.vehicleNumber || order.address || order.customerAddress
+          ))
+        ) || lastOrder;
         
         // TỰ ĐIỀN TẤT CẢ THÔNG TIN từ đơn hàng cuối (bao gồm cả mã đơn hàng) - với error handling
         const customerNameEl = document.getElementById('customerName');
         const vehicleNumberEl = document.getElementById('vehicleNumber');
         const orderCodeEl = document.getElementById('orderCode');
-        
-        if (customerNameEl) customerNameEl.value = lastOrder.customerName || '';
-        if (vehicleNumberEl) vehicleNumberEl.value = lastOrder.vehicleNumber || '';
+
+        // customerName đang dùng làm "Số điện thoại" theo UI
+        const phoneValue =
+          orderForContact.customerName ||
+          orderForContact.customerPhone ||
+          orderForContact.phone ||
+          orderForContact.phoneNumber ||
+          '';
+        const addressValue =
+          orderForContact.vehicleNumber ||
+          orderForContact.address ||
+          orderForContact.customerAddress ||
+          '';
+
+        if (customerNameEl) customerNameEl.value = phoneValue;
+        if (vehicleNumberEl) vehicleNumberEl.value = addressValue;
         if (orderCodeEl) orderCodeEl.value = lastOrder.orderCode || ''; // ✅ TỰ ĐIỀN MÃ ĐƠN HÀNG
 
         // Nạp lại TOÀN BỘ danh sách sản phẩm trong batch vào form chỉnh sửa
@@ -2200,49 +2219,49 @@ function clearBatch() {
   
     if (confirm(`Bạn có chắc chắn muốn xóa danh sách "${batchToDelete.name}"?`)) {
       console.log('User confirmed deletion, proceeding...');
-    
-  // Xóa batch được chọn từ local array (theo id)
-  const originalLength = orderBatches.length;
-  orderBatches = orderBatches.filter(b => b.id != selectedBatchId); // Xóa theo id
-    console.log('Local batch deleted. Original count:', originalLength, 'New count:', orderBatches.length);
-    
-    saveOrderBatches();
-    console.log('Local storage updated');
-    
-    // GỬI LỆNH XÓA BATCH ĐẾN ESP32
-  console.log('Sending delete command to ESP32 for batch ID:', batchToDelete.id);
-  deleteBatchFromESP32(batchToDelete.id).then(success => {
-      if (success) {
+
+      // Xóa trên ESP32 trước để tránh lệch dữ liệu local/device
+      console.log('Sending delete command to ESP32 for batch ID:', batchToDelete.id);
+      deleteBatchFromESP32(batchToDelete.id).then(success => {
+        if (!success) {
+          console.error('ESP32 batch deletion failed');
+          showNotification(`Không thể xóa danh sách "${batchToDelete.name}" trên thiết bị`, 'error');
+          return;
+        }
+
         console.log('ESP32 batch deletion successful');
-        showNotification(`Đã xóa danh sách "${batchToDelete.name}" khỏi thiết bị!`, 'success');
-      } else {
-        console.error('ESP32 batch deletion failed');
-        showNotification(`Đã xóa local nhưng lỗi xóa từ thiết bị: "${batchToDelete.name}"`, 'warning');
-      }
-    }).catch(error => {
-      console.error('ESP32 batch deletion error:', error);
-      showNotification(`Lỗi xóa từ thiết bị: ${error.message}`, 'error');
-    });
-    
-  // Reset selection (clear both selectors if present)
-  if (select) select.value = '';
-  const currentSelect = document.getElementById('currentBatchSelect');
-  if (currentSelect) currentSelect.value = '';
-    currentOrderBatch = [];
-    currentBatchId = null;
-    
-    // Cập nhật UI
-    updateBatchPreview();
-    updateBatchSelector();
-    updateCurrentBatchSelect();
-    updateOverview();
-    updateBatchDisplay();
-    
-    // Ẩn form
-    document.getElementById('batchInfo').style.display = 'none';
-    document.getElementById('orderFormContainer').style.display = 'none';
-    
-      showNotification(`Đã xóa danh sách "${batchToDelete.name}"!`, 'success');
+
+        // Chỉ xóa local sau khi ESP32 xóa thành công
+        const originalLength = orderBatches.length;
+        orderBatches = orderBatches.filter(b => b.id != selectedBatchId); // Xóa theo id
+        console.log('Local batch deleted. Original count:', originalLength, 'New count:', orderBatches.length);
+
+        saveOrderBatches();
+        console.log('Local storage updated');
+
+        // Reset selection (clear both selectors if present)
+        if (select) select.value = '';
+        const currentSelect = document.getElementById('currentBatchSelect');
+        if (currentSelect) currentSelect.value = '';
+        currentOrderBatch = [];
+        currentBatchId = null;
+
+        // Cập nhật UI
+        updateBatchPreview();
+        updateBatchSelector();
+        updateCurrentBatchSelect();
+        updateOverview();
+        updateBatchDisplay();
+
+        // Ẩn form
+        document.getElementById('batchInfo').style.display = 'none';
+        document.getElementById('orderFormContainer').style.display = 'none';
+
+        showNotification(`Đã xóa danh sách "${batchToDelete.name}"!`, 'success');
+      }).catch(error => {
+        console.error('ESP32 batch deletion error:', error);
+        showNotification(`Lỗi xóa từ thiết bị: ${error.message}`, 'error');
+      });
     }
   } catch (err) {
     console.error('Exception in clearBatch():', err);
@@ -2281,7 +2300,7 @@ function switchBatch() {
       
       // Reset executeCount display về 0
       currentExecuteCount = 0;
-      updateExecuteCountDisplay(0, 'switchBatch-reset');
+      updateExecuteCountDisplay(0, 'switchBatch-reset', true);
       
       // Set as active batch
       orderBatches.forEach(b => b.isActive = false);
@@ -2901,9 +2920,14 @@ async function startCounting() {
   }
   countingState.totalCounted += selectedOrders[currentOrderIndex].currentCount || 0;
   
-  // RESET executeCount display khi bắt đầu counting mới
-  currentExecuteCount = 0;
-  updateExecuteCountDisplay(countingState.totalCounted, 'startCounting-reset');
+  // Chỉ reset cứng khi bắt đầu mới; nếu resume từ paused thì giữ số đang có
+  if (isResumeFromPaused) {
+    currentExecuteCount = countingState.totalCounted;
+    updateExecuteCountDisplay(countingState.totalCounted, 'startCounting-resume', true);
+  } else {
+    currentExecuteCount = 0;
+    updateExecuteCountDisplay(countingState.totalCounted, 'startCounting-new', true);
+  }
   
   console.log('Bat dau dem tu don:', currentOrderIndex + 1, 'cua', selectedOrders.length);
   console.log('Tong ke hoach:', countingState.totalPlanned);
@@ -3059,7 +3083,7 @@ async function resetCounting() {
   
   // Reset executeCount display về 0
   currentExecuteCount = 0;
-  updateExecuteCountDisplay(0, 'resetCounting');
+  updateExecuteCountDisplay(0, 'resetCounting', true);
   
   updateUIForReset();
   
@@ -3438,7 +3462,7 @@ function updateOverview() {
   
   if (!activeBatch) {
     if (planCountElement) planCountElement.textContent = '0';
-    updateExecuteCountDisplay(0, 'updateOverview-no-batch');
+    updateExecuteCountDisplay(0, 'updateOverview-no-batch', true);
     // Reset button states khi không có batch
     updateButtonStates('reset');
     return;
@@ -5765,9 +5789,9 @@ function startStatusPolling() {
 let currentExecuteCount = 0;
 
 // Hàm cập nhật executeCount duy nhất - tránh conflicts
-function updateExecuteCountDisplay(newCount, source = 'unknown') {
-  // Chỉ cập nhật nếu số mới lớn hơn hoặc bằng (tránh rollback)
-  if (newCount >= currentExecuteCount) {
+function updateExecuteCountDisplay(newCount, source = 'unknown', force = false) {
+  // Cho phép reset cưỡng bức về 0 khi bắt đầu/chuyển batch/reset
+  if (force || newCount >= currentExecuteCount) {
     currentExecuteCount = newCount;
     const executeCountElement = document.getElementById('executeCount');
     if (executeCountElement) {
