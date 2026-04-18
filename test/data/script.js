@@ -923,8 +923,10 @@ async function updateDeviceStatus(data) {
       if (activeBatch) {
         const selectedOrders = activeBatch.orders.filter(o => o.selected);
         if (selectedOrders.length > 0) {
-          // Set first waiting/paused order to counting
-          const orderToStart = selectedOrders.find(o => o.status === 'waiting' || o.status === 'paused');
+          // Ưu tiên đơn đang chờ (waiting); chỉ resume paused nếu không còn waiting
+          const orderToStart =
+            selectedOrders.find(o => o.status === 'waiting') ||
+            selectedOrders.find(o => o.status === 'paused');
           if (orderToStart) {
             orderToStart.status = 'counting';
             countingState.currentOrderIndex = selectedOrders.indexOf(orderToStart);
@@ -2884,13 +2886,15 @@ async function startCounting() {
   let isResumeFromPaused = false; // Flag để biết có phải resume từ paused không
   
   if (currentOrderIndex === -1) {
-    // CHƯA CÓ ĐƠN HÀNG NÀO ĐANG ĐẾM - TÌM ĐƠN TIẾP THEO
-    currentOrderIndex = selectedOrders.findIndex(o => o.status === 'waiting' || o.status === 'paused');
-    
-    // Kiểm tra nếu tìm thấy đơn hàng paused
-    if (currentOrderIndex !== -1 && selectedOrders[currentOrderIndex].status === 'paused') {
-      isResumeFromPaused = true;
-      console.log('Resuming from paused order at index:', currentOrderIndex);
+    // CHƯA CÓ ĐƠN HÀNG NÀO ĐANG ĐẾM
+    // ƯU TIÊN chạy đơn waiting đã chọn trước, chỉ resume paused khi không còn waiting
+    currentOrderIndex = selectedOrders.findIndex(o => o.status === 'waiting');
+    if (currentOrderIndex === -1) {
+      currentOrderIndex = selectedOrders.findIndex(o => o.status === 'paused');
+      if (currentOrderIndex !== -1) {
+        isResumeFromPaused = true;
+        console.log('Resuming from paused order at index:', currentOrderIndex);
+      }
     }
     
     if (currentOrderIndex === -1) {

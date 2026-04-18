@@ -1177,6 +1177,18 @@ input[type="checkbox"] {
   color: #007bff;
 }
 
+/* Hide number input spinners (up/down buttons) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Range Input */
 input[type="range"] {
   width: 100%;
