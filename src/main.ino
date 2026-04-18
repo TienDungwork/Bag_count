@@ -757,6 +757,45 @@ static String orderProductCodeFromJson(JsonObject order) {
   return "";
 }
 
+// Tìm unitWeight theo đơn hiện tại (ưu tiên ordersData, sau đó productsData)
+static float resolveUnitWeightFromData(const String& wantedOrderCode, const String& wantedProductCode, const String& wantedProductName) {
+  // 1) Ưu tiên tra trong ordersData vì đơn hàng luôn có product.unitWeight
+  for (size_t i = 0; i < ordersData.size(); i++) {
+    if (!ordersData[i].containsKey("orders")) continue;
+    JsonArray orders = ordersData[i]["orders"];
+    for (size_t j = 0; j < orders.size(); j++) {
+      JsonObject order = orders[j];
+      String orderCodeCheck = order["orderCode"].as<String>();
+      String productCodeCheck = orderProductCodeFromJson(order);
+      String productNameCheck = order["productName"].as<String>();
+
+      bool orderMatch = !wantedOrderCode.isEmpty() && orderCodeCheck == wantedOrderCode;
+      bool codeMatch = !wantedProductCode.isEmpty() && productCodeCheck == wantedProductCode;
+      bool nameMatch = !wantedProductName.isEmpty() && productNameCheck == wantedProductName;
+      if (!(orderMatch && (codeMatch || nameMatch))) continue;
+
+      if (order.containsKey("product") && order["product"].is<JsonObject>() && order["product"].containsKey("unitWeight")) {
+        float w = order["product"]["unitWeight"].as<float>();
+        if (w > 0.0f) return w;
+      }
+    }
+  }
+
+  // 2) Fallback productsData
+  for (size_t i = 0; i < productsData.size(); i++) {
+    JsonObject product = productsData[i];
+    String nameCheck = product["name"].as<String>();
+    String codeCheck = product["code"].as<String>();
+    bool codeMatch = !wantedProductCode.isEmpty() && codeCheck == wantedProductCode;
+    bool nameMatch = !wantedProductName.isEmpty() && nameCheck == wantedProductName;
+    if ((codeMatch || nameMatch) && product.containsKey("unitWeight")) {
+      float w = product["unitWeight"].as<float>();
+      if (w > 0.0f) return w;
+    }
+  }
+  return 0.0f;
+}
+
 void saveSettingsToFile() {
   Serial.println("Saving settings to file...");
   
@@ -2804,7 +2843,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target; 
+        if (unitWeight <= 0.0f) {
+          unitWeight = resolveUnitWeightFromData(orderCode, productCodeFromWeb, productName);
+        }
         currentOrderUnitWeight = unitWeight;
+        Serial.println("Resolved UnitWeight: " + String(currentOrderUnitWeight, 3));
         
         // KHÔNG RESET COUNT NẾU keepCount = true
         if (!keepCount) {
@@ -2826,6 +2869,14 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           Serial.println("Keep existing totalCount: " + String(totalCount) + " (keepCount = true)");
         }
         
+        // MỖI LẦN ĐỔI ĐƠN: reset trạng thái cảm biến để không dính detectionDuration của đơn trước
+        isBagDetected = false;
+        waitingForInterval = false;
+        lastBagTime = 0;
+        bagStartTime = 0;
+        lastDebounceTime = 0;
+        Serial.println("Reset sensor states for order switch");
+
         // ĐẶT TRẠNG THÁI RUNNING NẾU isRunning = true
         if (isRunningOrder) {
           isRunning = true;
@@ -2931,13 +2982,25 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target;
+        if (unitWeight <= 0.0f) {
+          unitWeight = resolveUnitWeightFromData(orderCode, productCodeFromWeb, productName);
+        }
         currentOrderUnitWeight = unitWeight;
+        Serial.println("Resolved UnitWeight: " + String(currentOrderUnitWeight, 3));
         
         // KHÔNG RESET COUNT NẾU keepCount = true (để tiếp tục đếm multi-order)
         if (!keepCount) {
           totalCount = 0;
           isLimitReached = false;
         }
+
+        // Đổi đơn tiếp theo: luôn reset chu kỳ cảm biến để tránh cộng dồn thời gian đơn trước
+        isBagDetected = false;
+        waitingForInterval = false;
+        lastBagTime = 0;
+        bagStartTime = 0;
+        lastDebounceTime = 0;
+        Serial.println("Reset sensor states for next order");
         
         // ĐẢM BẢO TRẠNG THÁI ĐANG CHẠY
         isRunning = true;
