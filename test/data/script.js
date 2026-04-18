@@ -29,6 +29,19 @@ let currentPage = 1;
 let itemsPerPage = 10;
 let totalPages = 1;
 
+function normalizeOrderIdentity(order) {
+  if (!order) return order;
+  const normalized = { ...order };
+  const codeFromProduct = normalized.product?.code || '';
+  const nameFromProduct = normalized.product?.name || '';
+
+  if (!normalized.productCode && codeFromProduct) normalized.productCode = codeFromProduct;
+  if (!normalized.productName && nameFromProduct) normalized.productName = nameFromProduct;
+  if (!normalized.type) normalized.type = normalized.productCode || normalized.productName || '';
+
+  return normalized;
+}
+
 // Realtime WebSocket configuration
 let mqttClient = null;
 let mqttConnected = false;
@@ -321,7 +334,10 @@ async function loadOrdersFromESP32() {
       console.log('ESP32 orders response:', esp32Orders);
       
       if (esp32Orders && Array.isArray(esp32Orders) && esp32Orders.length > 0) {
-        orderBatches = esp32Orders;
+        orderBatches = esp32Orders.map(batch => ({
+          ...batch,
+          orders: Array.isArray(batch.orders) ? batch.orders.map(normalizeOrderIdentity) : []
+        }));
         localStorage.setItem('orderBatches', JSON.stringify(orderBatches));
         console.log('Orders loaded from ESP32:', esp32Orders.length, 'batches');
         console.log('First batch sample:', esp32Orders[0]);
@@ -1030,9 +1046,13 @@ async function handleCountUpdate(data) {
     console.log('countingState.isActive:', countingState.isActive);
 
     // MQTT-ONLY REAL-TIME COUNT UPDATE - No API fallback to prevent overwrites
-    // Bắt buộc phải có định danh sản phẩm để tránh dính count giữa các đơn
+    // Ưu tiên có định danh sản phẩm; nếu thiếu thì chỉ chấp nhận khi có đúng 1 đơn đang counting
     if (!data.type && !data.productCode) {
-      return;
+      const activeBatch = orderBatches.find(b => b.isActive);
+      const countingOrders = activeBatch ? activeBatch.orders.filter(o => o.selected && o.status === 'counting') : [];
+      if (countingOrders.length !== 1) {
+        return;
+      }
     }
     if (data.count !== undefined) {
     // Tìm đơn hàng đang được ESP32 đếm theo product type/name
@@ -1931,6 +1951,8 @@ function addOrderToBatch() {
     vehicleNumber,
     product,
     productName: product.name, // Thêm để đảm bảo tương thích
+    productCode: product.code || '',
+    type: product.code || product.name || '',
     quantity,
     warningQuantity,
     currentCount: 0,
@@ -2611,7 +2633,8 @@ function selectOrder(orderId, checked) {
       
       // CHECK IF ORDER HAS EXISTING COUNT TO PRESERVE
       const existingCount = getOrderSavedCount(order);
-      const keepExistingCount = existingCount > 0;
+      // Chỉ giữ count khi order thực sự đang paused; waiting phải bắt đầu từ 0
+      const keepExistingCount = (order.status === 'paused') && existingCount > 0;
       
       console.log(`Order has existing count: ${existingCount}, keepCount: ${keepExistingCount}`);
       
@@ -2935,6 +2958,12 @@ async function startCounting() {
     selectedOrders[currentOrderIndex].status = 'counting';
   }
   
+  // Nếu không phải resume paused thì ép đơn hiện tại về 0 trước mọi phép tính
+  if (!isResumeFromPaused) {
+    selectedOrders[currentOrderIndex].currentCount = 0;
+    selectedOrders[currentOrderIndex].executeCount = 0;
+  }
+
   // CẬP NHẬT COUNTING STATE
   countingState.isActive = true;
   countingState.currentOrderIndex = currentOrderIndex;
@@ -2974,10 +3003,8 @@ async function startCounting() {
   const productCode = product?.code || '';
   const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
 
-  // Bắt đầu đơn mới thì luôn reset count của chính đơn đó để tránh dính số dư đơn trước
-  if (!isResumeFromPaused) {
-    currentOrder.currentCount = 0;
-  } else {
+  // Resume thì giữ đúng số đã tạm dừng
+  if (isResumeFromPaused) {
     currentOrder.currentCount = resumeCount;
   }
   
@@ -4210,10 +4237,10 @@ async function loadOrderBatchesFromESP32() {
             // Preserve selected state cho từng order
             const ordersWithSelectedState = esp32Batch.orders.map(esp32Order => {
               const existingOrder = existingBatch.orders.find(o => o.id === esp32Order.id);
-              return {
+              return normalizeOrderIdentity({
                 ...esp32Order,
                 selected: existingOrder ? existingOrder.selected : false // Preserve hoặc mặc định false
-              };
+              });
             });
             
             return {
@@ -4225,7 +4252,7 @@ async function loadOrderBatchesFromESP32() {
             // Batch mới - tất cả orders chưa được chọn
             return {
               ...esp32Batch,
-              orders: Array.isArray(esp32Batch.orders) ? esp32Batch.orders.map(order => ({
+              orders: Array.isArray(esp32Batch.orders) ? esp32Batch.orders.map(order => normalizeOrderIdentity({
                 ...order,
                 selected: false
               })) : []
@@ -4626,12 +4653,6 @@ async function updateStatusFromDevice(data) {
     }
   }
   
-  // KHÓA đường count từ polling khi đang chạy để tránh dính số tổng giữa các đơn.
-  // Khi đang đếm, chỉ nhận count từ realtime (handleCountUpdate) đã match theo product identity.
-  if (countingState.isActive) {
-    return;
-  }
-
   // Update current count if device has new count
   if (data.count !== undefined) {
     const activeBatch = orderBatches.find(b => b.isActive);
@@ -4655,6 +4676,9 @@ async function updateStatusFromDevice(data) {
           if (!matchesCurrentOrder) {
             return;
           }
+        } else if (countingState.isActive) {
+          // Khi đang đếm mà polling/status không có định danh sản phẩm, bỏ qua để tránh dính số giữa các đơn
+          return;
         }
         
         // ESP32 gửi total count tích lũy cho toàn bộ batch
@@ -5263,6 +5287,9 @@ function addOrder() {
     orderCode,
     vehicleNumber,
     product,
+    productName: product.name,
+    productCode: product.code || '',
+    type: product.code || product.name || '',
     quantity,
     warningQuantity,
     currentCount: 0,
@@ -7122,6 +7149,8 @@ function addMultipleOrdersToBatch() {
         vehicleNumber,
         product: product, // Lưu object product hoàn chỉnh
         productName: product.name, // Để tương thích
+        productCode: product.code || '',
+        type: product.code || product.name || '',
         quantity: parseInt(quantity.value),
         warningQuantity: parseInt(warningQuantity.value) || 5,
         status: 'waiting',
