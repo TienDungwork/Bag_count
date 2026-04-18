@@ -37,6 +37,10 @@ function normalizeOrderIdentity(order) {
 
   if (!normalized.productCode && codeFromProduct) normalized.productCode = codeFromProduct;
   if (!normalized.productName && nameFromProduct) normalized.productName = nameFromProduct;
+  if (!normalized.productCode && normalized.productName && Array.isArray(currentProducts)) {
+    const productByName = currentProducts.find(p => p.name === normalized.productName);
+    if (productByName?.code) normalized.productCode = productByName.code;
+  }
   if (!normalized.type) normalized.type = normalized.productCode || normalized.productName || '';
 
   return normalized;
@@ -1080,7 +1084,7 @@ async function handleCountUpdate(data) {
               (incomingCode && orderProductCode && incomingCode === orderProductCode) ||
               (incomingType && (orderProductName === incomingType || orderProductCode === incomingType))
             )
-          : (order.status === 'counting');
+          : false;
         
         console.log(`Order ${i+1}: ${order.productName} - status:${order.status} - matches:${productMatches}`);
         
@@ -2642,6 +2646,7 @@ function selectOrder(orderId, checked) {
       sendESP32Command('set_current_order', {
         productName: productName,
         productCode: productCode,
+        type: productCode || productName,
         productDisplay: productDisplay,
         customerName: order.customerName,
         orderCode: order.orderCode,
@@ -3041,6 +3046,7 @@ async function startCounting() {
       customerName: currentOrder.customerName,
       productName: productName,
       productCode: productCode,
+      type: productCode || productName,
       target: currentOrder.quantity,
       warningQuantity: currentOrder.warningQuantity || 5,  // Sử dụng warningQuantity của đơn hàng
       keepCount: isResumeFromPaused, 
@@ -4958,6 +4964,7 @@ async function moveToNextOrder() {
         customerName: nextOrder.customerName,
         productName: nextProductName,
         productCode: nextProductCode,  // Thêm productCode
+        type: nextProductCode || nextProductName,
         target: nextOrder.quantity,
         warningQuantity: nextOrder.warningQuantity || 5,
         orderIndex: countingState.currentOrderIndex,
