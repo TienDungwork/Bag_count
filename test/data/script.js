@@ -2623,45 +2623,10 @@ function selectOrder(orderId, checked) {
     order.selected = checked;
     console.log('After update - order.selected:', order.selected);
     
-    // Get product info with both code and name
-    const product = order.product || currentProducts.find(p => p.name === order.productName);
-    const productName = product?.name || order.productName || 'Unknown product';
-    const productCode = product?.code || '';
-    const unitWeight = Number(product?.unitWeight || order.product?.unitWeight || order.unitWeight || 0);
-    const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
-    
-    console.log(`Order ${productDisplay} ${checked ? 'selected' : 'deselected'}`);
-    
-    // GỬI THÔNG TIN SẢN PHẨM ĐẾN ESP32 KHI CHỌN
-    if (checked) {
-      const plannedQuantity = order.plannedQuantity || order.quantity;
-      console.log('Sending product info to ESP32:', productDisplay, 'Target:', plannedQuantity);
-      
-      // CHECK IF ORDER HAS EXISTING COUNT TO PRESERVE
-      const existingCount = getOrderSavedCount(order);
-      // Chỉ giữ count khi order thực sự đang paused; waiting phải bắt đầu từ 0
-      const keepExistingCount = (order.status === 'paused') && existingCount > 0;
-      
-      console.log(`Order has existing count: ${existingCount}, keepCount: ${keepExistingCount}`);
-      
-      // Gửi thông tin đơn hàng đầy đủ bao gồm productCode
-      sendESP32Command('set_current_order', {
-        productName: productName,
-        productCode: productCode,
-        type: productCode || productName,
-        productDisplay: productDisplay,
-        customerName: order.customerName,
-        orderCode: order.orderCode,
-        target: plannedQuantity,
-        unitWeight: unitWeight,
-        warningQuantity: order.warningQuantity || 5, // Sử dụng warningQuantity của đơn hàng
-        keepCount: keepExistingCount, // Keep count if order has existing progress
-        currentCount: existingCount, // Send existing count to ESP32
-        isRunning: false  // Chỉ set order info, chưa chạy
-      }).catch(error => {
-        console.error('Failed to send order to ESP32:', error);
-      });
-    }
+    const productCode = order.product?.code || order.productCode || '';
+    console.log(`Order ${order.orderCode || order.id} (${productCode || order.productName}) ${checked ? 'selected' : 'deselected'}`);
+    // QUAN TRỌNG: tick/bỏ tick chỉ đồng bộ danh sách selected.
+    // Không set_current_order tại đây để tránh đổi context đếm khi chưa bấm Start.
 
     // Gửi ngay khi có thay đổi tích/bỏ tích để ESP32 luôn biết danh sách hiện tại
     sendSelectedOrdersToESP32(activeBatch);
