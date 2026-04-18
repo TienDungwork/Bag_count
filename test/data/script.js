@@ -3,7 +3,14 @@ let currentMode = 'output'; // 'input' or 'output'
 let orderBatches = []; // Array of order batches
 let currentBatchId = null;
 let currentOrderBatch = []; // Current batch being edited
+let hasAutoLoadedCurrentBatch = false; // Tránh phải click đổi qua lại mới hiện dữ liệu
 let currentProducts = [];
+
+// Toggle log hiển thị trên console trình duyệt
+const ENABLE_WEB_CONSOLE_LOG = false;
+if (!ENABLE_WEB_CONSOLE_LOG) {
+  console.log = () => {};
+}
 let countingHistory = [];
 let countingState = {
   isActive: false,
@@ -181,6 +188,10 @@ async function loadAllDataFromESP32() {
   console.log('Loading all data from ESP32...');
   
   try {
+    // Nạp sản phẩm + danh sách batch từ localStorage trước — tránh mất dữ liệu khi ESP32 trả mảng rỗng
+    loadProducts();
+    loadOrderBatches();
+    
     // KIỂM TRA XEM ESP32 CÓ DỮ LIỆU CHƯA
     const hasData = await checkESP32HasData();
     
@@ -308,20 +319,33 @@ async function loadOrdersFromESP32() {
         console.log('First batch sample:', esp32Orders[0]);
         return true;
       } else if (esp32Orders && Array.isArray(esp32Orders) && esp32Orders.length === 0) {
-        console.log('ℹESP32 has empty orders array - this is normal for new setup');
-        orderBatches = [];
-        localStorage.setItem('orderBatches', JSON.stringify(orderBatches));
+        console.log('ℹ ESP32 chưa có batch — giữ nguyên danh sách đơn hàng trong trình duyệt (localStorage)');
+        if (!orderBatches || orderBatches.length === 0) {
+          loadOrderBatches();
+        }
+        if (orderBatches && orderBatches.length > 0) {
+          saveOrderBatches();
+        }
         return true;
       } else {
         console.log('ESP32 orders response is not a valid array:', esp32Orders);
+        if (!orderBatches || orderBatches.length === 0) {
+          loadOrderBatches();
+        }
         return false;
       }
     } else {
       console.log('Failed to fetch orders from ESP32, status:', response.status);
+      if (!orderBatches || orderBatches.length === 0) {
+        loadOrderBatches();
+      }
       return false;
     }
   } catch (error) {
     console.error('Error loading orders from ESP32:', error);
+    if (!orderBatches || orderBatches.length === 0) {
+      loadOrderBatches();
+    }
     return false;
   }
 }
@@ -1776,19 +1800,39 @@ function loadBatch() {
         if (customerNameEl) customerNameEl.value = lastOrder.customerName || '';
         if (vehicleNumberEl) vehicleNumberEl.value = lastOrder.vehicleNumber || '';
         if (orderCodeEl) orderCodeEl.value = lastOrder.orderCode || ''; // ✅ TỰ ĐIỀN MÃ ĐƠN HÀNG
-        
-        // TỰ ĐIỀN THÔNG TIN SẢN PHẨM từ đơn hàng cuối (nếu muốn copy)
-        const firstProductSelect = document.querySelector('.productSelect');
-        const firstQuantity = document.querySelector('.quantity');
-        const firstWarningQuantity = document.querySelector('.warningQuantity');
-        
-        if (firstProductSelect && lastOrder.product) {
-          firstProductSelect.value = lastOrder.product.id || '';
+
+        // Nạp lại TOÀN BỘ danh sách sản phẩm trong batch vào form chỉnh sửa
+        productItemCounter = 0;
+        addInitialProductItem();
+        for (let i = 1; i < batch.orders.length; i++) {
+          addProductItem();
         }
-        if (firstQuantity) firstQuantity.value = lastOrder.quantity || '';
-        if (firstWarningQuantity) firstWarningQuantity.value = lastOrder.warningQuantity || '';
-        
-        console.log('Auto-filled form from last order:', lastOrder.customerName);
+
+        const productItems = document.querySelectorAll('.product-item');
+        batch.orders.forEach((order, idx) => {
+          const item = productItems[idx];
+          if (!item) return;
+
+          const selectEl = item.querySelector('.productSelect');
+          const quantityEl = item.querySelector('.quantity');
+          const warningEl = item.querySelector('.warningQuantity');
+
+          // Tìm sản phẩm theo id -> code -> name để tương thích dữ liệu cũ/mới
+          const matchedProduct = currentProducts.find(p =>
+            (order.product && order.product.id && p.id == order.product.id) ||
+            (order.productCode && p.code == order.productCode) ||
+            (order.product && order.product.code && p.code == order.product.code) ||
+            (order.productName && p.name == order.productName)
+          );
+
+          if (selectEl) {
+            selectEl.value = matchedProduct ? matchedProduct.id : '';
+          }
+          if (quantityEl) quantityEl.value = order.quantity || '';
+          if (warningEl) warningEl.value = order.warningQuantity || '';
+        });
+
+        console.log('Auto-filled multi-product form from batch orders:', batch.orders.length, 'items');
       } else {
         // Nếu batch trống, xóa form
         clearAllFormFields();
@@ -2029,7 +2073,7 @@ async function saveBatch() {
   if (currentBatchId) {
     // Update existing batch
     console.log('DEBUG: Updating existing batch with ID:', currentBatchId);
-    const index = orderBatches.findIndex(b => b.id === currentBatchId);
+    const index = orderBatches.findIndex(b => b.id == currentBatchId);
     if (index !== -1) {
       orderBatches[index] = batch;
       console.log('DEBUG: Updated existing batch at index:', index);
@@ -2289,6 +2333,14 @@ function updateCurrentBatchSelect() {
       }
       select.appendChild(option);
     });
+
+    // Nếu dropdown đã có batch active được chọn sẵn, tự load dữ liệu vào form ngay
+    if (!hasAutoLoadedCurrentBatch && select.value && (!currentBatchId || currentOrderBatch.length === 0)) {
+      hasAutoLoadedCurrentBatch = true;
+      setTimeout(() => {
+        loadBatch();
+      }, 0);
+    }
   }
 }
 
