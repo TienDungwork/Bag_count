@@ -2785,7 +2785,9 @@ async function sendSelectedOrdersToESP32(batch) {
   }
   
   const selectedOrders = batch.orders.filter(o => o.selected);
+  selectedOrders.sort((a, b) => (a.orderNumber || 0) - (b.orderNumber || 0));
   const selectedOrderIds = selectedOrders.map(o => o.id);
+  const firstSelectedOrder = selectedOrders[0] || null;
   
   console.log(`Sending ${selectedOrders.length} selected orders to ESP32:`, selectedOrderIds);
   
@@ -2802,7 +2804,17 @@ async function sendSelectedOrdersToESP32(batch) {
       },
       body: JSON.stringify({
         batchId: batch.id.toString(),
-        selectedOrders: selectedOrderIds
+        selectedOrders: selectedOrderIds,
+        selectedCount: selectedOrders.length,
+        firstSelectedOrder: firstSelectedOrder ? {
+          id: firstSelectedOrder.id,
+          orderNumber: firstSelectedOrder.orderNumber || 0,
+          orderCode: firstSelectedOrder.orderCode || '',
+          customerName: firstSelectedOrder.customerName || '',
+          productName: firstSelectedOrder.product?.name || firstSelectedOrder.productName || '',
+          productCode: firstSelectedOrder.product?.code || firstSelectedOrder.productCode || '',
+          quantity: firstSelectedOrder.quantity || 0
+        } : null
       })
     });
     
@@ -2921,6 +2933,7 @@ async function startCounting() {
   }
   
   let selectedOrders = activeBatch.orders.filter(o => o.selected);
+  selectedOrders.sort((a, b) => (a.orderNumber || 0) - (b.orderNumber || 0));
   console.log('Selected orders:', selectedOrders);
   
   // Kiểm tra nếu không có đơn hàng nào được chọn
@@ -3039,6 +3052,11 @@ async function startCounting() {
   updateUIForStart();
   
   try {
+    // Bắt đầu đơn mới (không resume) thì reset count trên ESP32 trước để tránh dính số đơn trước
+    if (!isResumeFromPaused) {
+      await sendESP32Command('reset_count_only');
+    }
+
     // GỬI THÔNG TIN ĐƠN HÀNG HIỆN TẠI TRƯỚC KHI START
     // -> tránh mang theo count dư của đơn trước
     await sendESP32Command('set_current_order', {

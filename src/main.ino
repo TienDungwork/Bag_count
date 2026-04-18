@@ -4946,9 +4946,12 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       
       String batchId = doc["batchId"].as<String>();
       JsonArray selectedOrders = doc["selectedOrders"];
+      int selectedCount = doc["selectedCount"] | (int)selectedOrders.size();
+      JsonObject firstSelectedOrder = doc["firstSelectedOrder"];
       
       Serial.println("Updating selected orders for batch: " + batchId);
       Serial.println("Selected orders count: " + String(selectedOrders.size()));
+      Serial.println("Selected count (from web): " + String(selectedCount));
       
       // DEBUG: In ra danh sách ID được chọn
       Serial.print("Selected order IDs: ");
@@ -4991,6 +4994,29 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       }
       
       if (batchFound) {
+        // Nếu web gửi đơn đầu tiên đã tích, đồng bộ ngay để ESP32 biết đơn bắt đầu
+        if (!firstSelectedOrder.isNull()) {
+          String firstProductName = firstSelectedOrder["productName"].as<String>();
+          String firstProductCode = firstSelectedOrder["productCode"].as<String>();
+          String firstOrderCode = firstSelectedOrder["orderCode"].as<String>();
+          String firstCustomerName = firstSelectedOrder["customerName"].as<String>();
+          int firstQuantity = firstSelectedOrder["quantity"] | 0;
+
+          if (firstProductName.length() > 0) {
+            bagType = firstProductName;
+            productCode = firstProductCode;
+            orderCode = firstOrderCode;
+            customerName = firstCustomerName;
+            if (firstQuantity > 0) targetCount = firstQuantity;
+
+            Serial.println("Synced first selected order from web:");
+            Serial.println("  Product: " + bagType);
+            Serial.println("  ProductCode: " + productCode);
+            Serial.println("  OrderCode: " + orderCode);
+            Serial.println("  Target: " + String(targetCount));
+          }
+        }
+
         saveOrdersToFile();
         server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Selected orders updated\"}");
       } else {
