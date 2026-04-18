@@ -35,7 +35,7 @@ const REALTIME_WS_PATH = '/ws';
 let lastHeartbeat = 0;
 let deviceConnected = false;
 let heartbeatCheckInterval = null;
-const HEARTBEAT_TIMEOUT = 5000; // 45 giây không có heartbeat thì coi như mất kết nối (ESP32 gửi mỗi 30s)
+const HEARTBEAT_TIMEOUT = 20000; // 20 giây không có realtime/heartbeat mới coi là mất kết nối
 let statusPollingInterval = null;
 
 // API polling configuration (MANAGEMENT DATA ONLY - NO real-time counting or IR commands)
@@ -842,6 +842,12 @@ function subscribeMQTTTopics() {
 // Handle MQTT Messages
 async function handleMQTTMessage(topic, data) {
   lastMqttUpdate = Date.now();
+  // Có bất kỳ gói realtime nào cũng coi là thiết bị còn online
+  lastHeartbeat = Date.now();
+  if (!deviceConnected) {
+    deviceConnected = true;
+    updateDeviceConnectionStatus(true);
+  }
   
   switch (topic) {
     case 'bagcounter/status':
@@ -1237,6 +1243,12 @@ function updateHeartbeat(data) {
 function checkHeartbeatTimeout() {
   const now = Date.now();
   const timeSinceLastHeartbeat = now - lastHeartbeat;
+  const timeSinceLastRealtime = now - (lastMqttUpdate || 0);
+  
+  // Nếu vừa có realtime data (count/status/alert...) thì không coi là mất kết nối
+  if (timeSinceLastRealtime <= HEARTBEAT_TIMEOUT) {
+    return;
+  }
   
   if (timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT && deviceConnected) {
     // Thiết bị mất kết nối
@@ -1293,8 +1305,8 @@ function startDeviceMonitoring() {
     clearInterval(heartbeatCheckInterval);
   }
   
-  // Kiểm tra heartbeat mỗi 5 giây
-  heartbeatCheckInterval = setInterval(checkHeartbeatTimeout, 5000);
+  // Kiểm tra heartbeat/realtime mỗi 3 giây
+  heartbeatCheckInterval = setInterval(checkHeartbeatTimeout, 3000);
   
   // Khởi tạo trạng thái ban đầu
   lastHeartbeat = Date.now();
@@ -2884,6 +2896,8 @@ async function startCounting() {
     
     // updateUIForStart(); // Đã di chuyển lên trên
     saveOrderBatches();
+    // Đồng bộ trạng thái counting/waiting lên ESP32 để auto chuyển đơn sau khi xong đơn 1
+    await sendOrderBatchesToESP32();
     updateOrderTable();
     updateOverview();
     

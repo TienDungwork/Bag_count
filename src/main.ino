@@ -736,6 +736,18 @@ void copyJsonObject(JsonObject src, JsonObject dst) {
   }
 }
 
+// Mã SP trên đơn: ưu tiên product.code, fallback productCode phẳng (đồng bộ web)
+static String orderProductCodeFromJson(JsonObject order) {
+  if (order.containsKey("product") && order["product"].is<JsonObject>() &&
+      order["product"].containsKey("code")) {
+    return order["product"]["code"].as<String>();
+  }
+  if (order.containsKey("productCode")) {
+    return order["productCode"].as<String>();
+  }
+  return "";
+}
+
 void saveSettingsToFile() {
   Serial.println("Saving settings to file...");
   
@@ -5784,10 +5796,7 @@ void updateCount(int bagCount) {
       for (size_t j = 0; j < orders.size(); j++) {
         JsonObject order = orders[j];
         String orderProductName = order["productName"].as<String>();
-        String orderProductCode = "";
-        if (order.containsKey("product") && order["product"].containsKey("code")) {
-          orderProductCode = order["product"]["code"].as<String>();
-        }
+        String orderProductCode = orderProductCodeFromJson(order);
         String status = order["status"].as<String>();
         bool selected = order["selected"] | false;
         
@@ -5961,21 +5970,20 @@ void updateCount(int bagCount) {
         // Mark order as completed in ordersData (bagConfigs will sync automatically)
         Serial.println("Order '" + completedOrderType + "' marked as COMPLETED");
         
-        //  TỰ ĐỘNG CHUYỂN SANG ĐƠN HÀNG TIẾP THEO THEO ORDER NUMBER
+        //  TỰ ĐỘNG CHUYỂN SANG ĐƠN HÀNG TIẾP THEO THEO ORDER NUMBER (hoặc thứ tự dòng nếu orderNumber = 0)
         bool foundNextOrder = false;
-        Serial.println("Searching for next order by orderNumber...");
+        Serial.println("Searching for next order...");
         
-        // Tìm orderNumber hiện tại từ ordersData - TÌM ĐƠN VỪA HOÀN THÀNH  
         int currentOrderNumber = 0;
-        String currentProductCode = productCode; // Lưu productCode của đơn vừa hoàn thành
+        String currentProductCode = productCode;
+        int completedOrderRow = -1;
+        size_t completedBatchRow = 0;
+        bool completedRowFound = false;
         
         Serial.println("Completed order info: productName=" + completedOrderType + ", productCode=" + currentProductCode);
         
-        // Duyệt ordersData để tìm đơn hàng vừa hoàn thành theo productName VÀ productCode TRONG BATCH HIỆN TẠI
         for (size_t i = 0; i < ordersData.size(); i++) {
           String batchId = ordersData[i]["id"].as<String>();
-          
-          // CHỈ TÌM TRONG BATCH ĐANG ACTIVE
           if (batchId != currentBatchId) {
             continue;
           }
@@ -5984,38 +5992,36 @@ void updateCount(int bagCount) {
           for (size_t j = 0; j < orders.size(); j++) {
             JsonObject order = orders[j];
             String orderProductName = order["productName"].as<String>();
-            String orderProductCode = "";
-            if (order.containsKey("product") && order["product"].containsKey("code")) {
-              orderProductCode = order["product"]["code"].as<String>();
-            }
+            String orderProductCode = orderProductCodeFromJson(order);
             bool selected = order["selected"] | false;
             
-            // Tìm đơn có cùng productName VÀ productCode với đơn vừa hoàn thành VÀ được chọn
             if (orderProductName == completedOrderType && orderProductCode == currentProductCode && selected) {
               currentOrderNumber = order["orderNumber"] | 0;
-              Serial.println("Completed order found: orderNumber=" + String(currentOrderNumber) + ", product=" + orderProductName + ", code=" + orderProductCode);
+              Serial.println("Completed order found: orderNumber=" + String(currentOrderNumber) + ", row=" + String(j) + ", product=" + orderProductName + ", code=" + orderProductCode);
               
-              // Đánh dấu đơn này là completed trong ordersData VÀ lưu executeCount cuối cùng
               order["status"] = "completed";
-              order["executeCount"] = finalExecuteCount; // SỬ DỤNG finalExecuteCount thay vì totalCount
+              order["executeCount"] = finalExecuteCount;
               Serial.println("Set executeCount=" + String(finalExecuteCount) + " for completed order: " + orderProductName + " (code: " + orderProductCode + ")");
+              
+              completedOrderRow = (int)j;
+              completedBatchRow = i;
+              completedRowFound = true;
               break;
             }
           }
-          if (currentOrderNumber > 0) break;
+          if (completedRowFound) {
+            break;
+          }
         }
         
-        // Tìm đơn hàng tiếp theo được chọn với orderNumber > currentOrderNumber TRONG CÙNG BATCH
-        Serial.println("Looking for next SELECTED order with orderNumber > " + String(currentOrderNumber) + " in batch=" + currentBatchId);
+        Serial.println("Looking for next SELECTED order after orderNumber=" + String(currentOrderNumber) + " in batch=" + currentBatchId);
         
         int nextOrderNumber = -1;
         JsonObject nextOrder;
         
-        // CHỈ TÌM TRONG BATCH HIỆN TẠI
         for (size_t i = 0; i < ordersData.size(); i++) {
           String batchId = ordersData[i]["id"].as<String>();
           
-          // CHỈ TÌM TRONG BATCH ĐANG ACTIVE
           if (batchId != currentBatchId) {
             Serial.println("Skipping batch " + batchId + " (not current batch)");
             continue;
@@ -6024,7 +6030,6 @@ void updateCount(int bagCount) {
           JsonArray orders = ordersData[i]["orders"];
           Serial.println("Searching in batch " + batchId + " with " + String(orders.size()) + " orders");
           
-          // Duyệt tất cả orders để tìm đơn tiếp theo được chọn
           for (size_t j = 0; j < orders.size(); j++) {
             JsonObject order = orders[j];
             int orderNumber = order["orderNumber"] | 0;
@@ -6034,9 +6039,8 @@ void updateCount(int bagCount) {
             
             Serial.println("  Order " + String(orderNumber) + ": " + productName + " (selected=" + String(selected) + ", status=" + status + ")");
             
-            // TÌM ĐƠN ĐƯỢC CHỌN, ĐANG CHỜ VÀ CÓ orderNumber > currentOrderNumber
-            if (selected && status == "waiting" && orderNumber > currentOrderNumber) {
-              // Tìm đơn có orderNumber nhỏ nhất trong các đơn thỏa mãn
+            bool canBeNext = (status == "waiting" || status == "paused");
+            if (selected && canBeNext && orderNumber > currentOrderNumber) {
               if (nextOrderNumber == -1 || orderNumber < nextOrderNumber) {
                 nextOrderNumber = orderNumber;
                 nextOrder = order;
@@ -6044,19 +6048,35 @@ void updateCount(int bagCount) {
               }
             }
           }
-          break; // Chỉ xử lý batch hiện tại
+          
+          // Fallback: orderNumber thiếu hoặc cả batch đều 0 — lấy đơn được chọn, chờ/pause, ngay sau dòng vừa hoàn thành
+          if (nextOrderNumber == -1 && completedRowFound && completedOrderRow >= 0 && i == completedBatchRow) {
+            for (size_t j = (size_t)completedOrderRow + 1; j < orders.size(); j++) {
+              JsonObject order = orders[j];
+              bool selected = order["selected"] | false;
+              String status = order["status"].as<String>();
+              String productName = order["productName"].as<String>();
+              bool canBeNext = (status == "waiting" || status == "paused");
+              if (selected && canBeNext) {
+                nextOrder = order;
+                nextOrderNumber = order["orderNumber"] | 0;
+                if (nextOrderNumber <= 0) {
+                  nextOrderNumber = (int)j + 1;
+                }
+                Serial.println("FALLBACK next order by table row " + String(j) + ": " + productName + " (effective order # " + String(nextOrderNumber) + ")");
+                break;
+              }
+            }
+          }
+          
+          break;
         }
         
-        // Nếu tìm thấy đơn tiếp theo
         if (nextOrderNumber != -1) {
               String productName = nextOrder["productName"].as<String>();
               Serial.println("Found SELECTED next order: " + String(nextOrderNumber) + " - " + productName);
               
-              // CẬP NHẬT THÔNG TIN ĐƠN MỚI
-              String newProductCode = "";
-              if (nextOrder.containsKey("product") && nextOrder["product"].containsKey("code")) {
-                newProductCode = nextOrder["product"]["code"].as<String>();
-              }
+              String newProductCode = orderProductCodeFromJson(nextOrder);
               int quantity = nextOrder["quantity"] | 1;
               int warningQuantity = nextOrder["warningQuantity"].as<int>() | 5; // Mặc định 5 nếu không có
               
@@ -6191,10 +6211,7 @@ void updateCount(int bagCount) {
           for (size_t j = 0; j < orders.size(); j++) {
             JsonObject order = orders[j];
             String orderProductName = order["productName"].as<String>();
-            String orderProductCode = "";
-            if (order.containsKey("product") && order["product"].containsKey("code")) {
-              orderProductCode = order["product"]["code"].as<String>();
-            }
+            String orderProductCode = orderProductCodeFromJson(order);
             bool selected = order["selected"] | false;
             
             // Tìm đơn có cùng productName VÀ productCode với đơn vừa hoàn thành VÀ được chọn
