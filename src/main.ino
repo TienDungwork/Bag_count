@@ -74,12 +74,8 @@ IPAddress wifi_dns2;
 const char* ap_ssid = "BO DEM THONG MINH";
 const char* ap_password = "0989328858";
 
-//----------------------------------------Network & MQTT config
-String mqtt_server = "192.168.1.103";  // Địa chỉ IP của máy tính chạy broker local
-String mqtt_server_backup = "test.mosquitto.org";
-int mqtt_port = 1883;
-int mqtt_websocket_port = 8080;  // port MQTT
-bool mqtt_use_backup = false;
+//----------------------------------------Network & Realtime config
+// MQTT broker 1 has been removed; realtime uses internal WebSocket server.
 const uint16_t REALTIME_WS_PORT = 81;
 
 // MQTT Broker 2 config (Server anh Dũng)
@@ -101,7 +97,6 @@ const char* TOPIC_IR_CMD = "bagcounter/ir_command";       // IR Remote commands
 const char* TOPIC_CMD_START = "bagcounter/cmd/start";     // Lệnh start
 const char* TOPIC_CMD_PAUSE = "bagcounter/cmd/pause";     // Lệnh pause  
 const char* TOPIC_CMD_RESET = "bagcounter/cmd/reset";     // Lệnh reset
-const char* TOPIC_CMD_SELECT = "bagcounter/cmd/select";   // Chọn đơn hàng
 const char* TOPIC_CMD_BATCH = "bagcounter/cmd/batch_info"; // Thông tin batch
 const char* TOPIC_CMD_TARGET = "bagcounter/cmd/target";   // Cập nhật target
 const char* TOPIC_CONFIG = "bagcounter/config/update";    // Cập nhật config
@@ -125,8 +120,6 @@ IPAddress secondaryDNS(8, 8, 4, 4);     // DNS phụ (Google DNS)
 WebServer server(80);
 AsyncWebServer realtimeServer(REALTIME_WS_PORT);
 AsyncWebSocket realtimeSocket("/ws");
-WiFiClient ethClient;
-PubSubClient mqtt(ethClient);
 
 // MQTT Client thứ 2 (Server anh Dũng)
 WiFiClient ethClient2;
@@ -280,6 +273,7 @@ bool isCountingEnabled = false;  // Biến kiểm soát việc đếm
 bool isTriggerEnabled = false;   // Biến kiểm soát cảm biến khởi động
 bool isCounting = false;    // Biến mới để theo dõi trạng thái đếm
 bool isStartAuthorized = false; // Chỉ cho đếm sau khi nhận START hợp lệ
+bool waitForSensorClearOnStart = false; // Chặn đếm ảo khi START nếu sensor đang HIGH
 
 // Biến trạng thái cho LED
 bool startLedOn = false;  // true = sáng (HIGH), false = tắt (LOW)
@@ -556,6 +550,7 @@ void handleWebCommand(int button) {
       isTriggerEnabled = true;
       isCountingEnabled = true;
       isStartAuthorized = true;
+      waitForSensorClearOnStart = true;
       currentSystemStatus = "RUNNING";
       action = "START";
       
@@ -583,6 +578,7 @@ void handleWebCommand(int button) {
       isTriggerEnabled = false;
       isCountingEnabled = false;
       isStartAuthorized = false;
+      waitForSensorClearOnStart = false;
       currentSystemStatus = "PAUSE";
       action = "PAUSE";
       
@@ -601,6 +597,7 @@ void handleWebCommand(int button) {
       isTriggerEnabled = false;
       isCountingEnabled = false;
       isStartAuthorized = false;
+      waitForSensorClearOnStart = false;
       history.clear();
       startTimeStr = "";
       timeWaitingForSync = false;
@@ -819,12 +816,6 @@ void saveSettingsToFile() {
   doc["relayDelayAfterComplete"] = relayDelayAfterComplete;
   doc["bagTimeMultiplier"] = bagTimeMultiplier;
   
-  // MQTT settings
-  doc["mqttServer"] = mqtt_server;
-  doc["mqttServerBackup"] = mqtt_server_backup;
-  doc["mqttPort"] = mqtt_port;
-  doc["mqttWebSocketPort"] = mqtt_websocket_port;
-  
   // MQTT2 settings (Server anh Dũng)
   doc["mqtt2Server"] = mqtt_server2;
   doc["mqtt2Port"] = mqtt_port2;
@@ -904,20 +895,6 @@ void loadSettingsFromFile() {
       // DEBUG: In giá trị minBagInterval được load
       Serial.println("🔧 LOADED minBagInterval từ settings: " + String(minBagInterval) + "ms");
       
-      // Load MQTT settings
-      if (doc.containsKey("mqttServer")) {
-        mqtt_server = doc["mqttServer"].as<String>();
-      }
-      if (doc.containsKey("mqttServerBackup")) {
-        mqtt_server_backup = doc["mqttServerBackup"].as<String>();
-      }
-      if (doc.containsKey("mqttPort")) {
-        mqtt_port = doc["mqttPort"].as<int>();
-      }
-      if (doc.containsKey("mqttWebSocketPort")) {
-        mqtt_websocket_port = doc["mqttWebSocketPort"].as<int>();
-      }
-      
       // Load MQTT2 settings (Server anh Dũng)
       if (doc.containsKey("mqtt2Server")) {
         mqtt_server2 = doc["mqtt2Server"].as<String>();
@@ -973,9 +950,6 @@ void loadSettingsFromFile() {
       Serial.println("    minBagInterval: " + String(minBagInterval) + "ms");
       Serial.println("    autoReset: " + String(autoReset ? "true" : "false"));
       Serial.println("    relayDelayAfterComplete: " + String(relayDelayAfterComplete) + "ms");
-      Serial.println("    mqttServer: " + mqtt_server);
-      Serial.println("    mqttPort: " + String(mqtt_port));
-      
       Serial.println("All settings loaded from file successfully");
     } else {
       Serial.println("Failed to parse settings JSON - recreating file");
@@ -1012,12 +986,6 @@ void createDefaultSettingsFile() {
   doc["autoReset"] = true;
   doc["relayDelayAfterComplete"] = 10000;
   doc["bagTimeMultiplier"] = 25;  // Default 25%
-  
-  // MQTT settings - default values
-  doc["mqttServer"] = "192.168.1.103";
-  doc["mqttServerBackup"] = "test.mosquitto.org";
-  doc["mqttPort"] = 1883;
-  doc["mqttWebSocketPort"] = 8080;
   
   // Weight-based Detection Delay settings - default values
   doc["enableWeightBasedDelay"] = false;
@@ -1981,25 +1949,46 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
     Serial.println("MQTT Command: RESET from Web");
     handleWebCommand(3); // Reset command from web
     
-  } else if (topicStr == TOPIC_CMD_SELECT) {
-    Serial.println("MQTT Command: SELECT ORDER");
+  } else if (topicStr == "bagcounter/ws/current_order") {
+    Serial.println("Realtime Command: CURRENT ORDER via WS");
     // Parse JSON để chọn đơn hàng
-    DynamicJsonDocument doc(256);
+    DynamicJsonDocument doc(512);
     if (deserializeJson(doc, message) == DeserializationError::Ok) {
-  String orderType = doc["type"].as<String>();
+      String orderType = doc["type"].as<String>();
+      String selectedOrderCode = doc["orderCode"].as<String>();
+      String selectedProductCode = doc["productCode"].as<String>();
+      String selectedCustomerName = doc["customerName"].as<String>();
       int target = doc["target"] | 20;
       int warn = doc["warn"] | 10;
+      bool keepCount = doc["keepCount"] | false;
+      int currentCountFromWeb = doc["currentCount"] | 0;
       
       if (orderType.length() > 0) {
         bagType = orderType;
+        if (selectedProductCode.length() > 0) {
+          productCode = selectedProductCode;
+        }
+        if (selectedOrderCode.length() > 0) {
+          orderCode = selectedOrderCode;
+        }
+        if (selectedCustomerName.length() > 0) {
+          customerName = selectedCustomerName;
+        }
         targetCount = target;
         
-        // Reset trạng thái cho đơn hàng mới
-        totalCount = 0;
+        // Reset trạng thái cho đơn hàng mới (hoặc resume từ web)
+        totalCount = keepCount ? currentCountFromWeb : 0;
         isRunning = false;
         isTriggerEnabled = false;
         isCountingEnabled = false;
         isLimitReached = false;
+        isStartAuthorized = false;
+        waitForSensorClearOnStart = true;
+        isBagDetected = false;
+        waitingForInterval = false;
+        bagStartTime = 0;
+        lastBagTime = 0;
+        lastDebounceTime = 0;
         
         // Cập nhật bagConfig
         bool found = false;
@@ -2020,11 +2009,41 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         
         saveBagConfigsToFile();
         needUpdate = true;
+
+        // Đồng bộ order đang chọn vào ordersData để tránh mất context khi resume
+        for (size_t i = 0; i < ordersData.size(); i++) {
+          JsonArray orders = ordersData[i]["orders"];
+          for (size_t j = 0; j < orders.size(); j++) {
+            JsonObject order = orders[j];
+            String oCode = order["orderCode"].as<String>();
+            String oProductCode = orderProductCodeFromJson(order);
+            String oProductName = order["productName"].as<String>();
+
+            bool isMatch = false;
+            if (selectedOrderCode.length() > 0 && selectedProductCode.length() > 0) {
+              isMatch = (oCode == selectedOrderCode && oProductCode == selectedProductCode);
+            } else if (selectedOrderCode.length() > 0) {
+              isMatch = (oCode == selectedOrderCode);
+            } else if (selectedProductCode.length() > 0) {
+              isMatch = (oProductCode == selectedProductCode);
+            } else {
+              isMatch = (oProductName == orderType);
+            }
+
+            if (isMatch) {
+              order["selected"] = true;
+              order["status"] = keepCount ? "paused" : "waiting";
+              order["currentCount"] = keepCount ? currentCountFromWeb : 0;
+              order["executeCount"] = keepCount ? currentCountFromWeb : 0;
+            }
+          }
+        }
+        saveOrdersToFile();
         
         // Publish confirmation
         publishStatusMQTT();
         
-        Serial.println("Order selected MQTT: " + orderType);
+        Serial.println("Order selected MQTT: " + orderType + " | orderCode=" + orderCode + " | productCode=" + productCode + " | currentCount=" + String(totalCount));
       }
     }
     
@@ -2364,19 +2383,6 @@ void setupWebServer() {
       file.close();
     } else {
       server.send(404, "text/plain", "JS not found");
-    }
-  });
-
-  // Serve MQTT.js library
-  server.on("/mqtt.min.js", HTTP_GET, [](){
-    if (LittleFS.exists("/mqtt.min.js")) {
-      File file = LittleFS.open("/mqtt.min.js", "r");
-      server.streamFile(file, "application/javascript");
-      file.close();
-      Serial.println("Served mqtt.min.js from LittleFS");
-    } else {
-      server.send(404, "text/plain", "mqtt.min.js not found");
-      Serial.println("ERROR: mqtt.min.js not found in LittleFS");
     }
   });
 
@@ -2812,9 +2818,9 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Count reset to 0, keeping current running state");
       } else if (cmd == "set_current_order") {
         // Cập nhật thông tin đơn hàng hiện tại để hiển thị trên LED
-  String productName = doc["productName"].as<String>();
-  String customerName = doc["customerName"].as<String>();
-  String orderCode = doc["orderCode"].as<String>();
+        String productName = doc["productName"].as<String>();
+        String customerNameFromWeb = doc["customerName"].as<String>();
+        String orderCodeFromWeb = doc["orderCode"].as<String>();
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
@@ -2826,8 +2832,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Setting current order:");
         Serial.println("Product: " + productName);
         Serial.println("Product Code: " + productCodeFromWeb);
-        Serial.println("Customer: " + customerName);
-        Serial.println("Order Code: " + orderCode);
+        Serial.println("Customer: " + customerNameFromWeb);
+        Serial.println("Order Code: " + orderCodeFromWeb);
         Serial.println("Target: " + String(target));
         Serial.println("Warning: " + String(warningQuantity));
         Serial.println("UnitWeight: " + String(unitWeight, 3));
@@ -2838,13 +2844,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         // Cập nhật biến hiển thị
         bagType = productName;
         productCode = productCodeFromWeb;  // Cập nhật mã sản phẩm
-        orderCode = doc["orderCode"].as<String>();      // Cập nhật biến global
-        customerName = doc["customerName"].as<String>(); // Cập nhật biến global
+        orderCode = orderCodeFromWeb;      // Cập nhật biến global
+        customerName = customerNameFromWeb; // Cập nhật biến global
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target; 
         if (unitWeight <= 0.0f) {
-          unitWeight = resolveUnitWeightFromData(orderCode, productCodeFromWeb, productName);
+          unitWeight = resolveUnitWeightFromData(orderCodeFromWeb, productCodeFromWeb, productName);
         }
         currentOrderUnitWeight = unitWeight;
         Serial.println("Resolved UnitWeight: " + String(currentOrderUnitWeight, 3));
@@ -2875,6 +2881,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         lastBagTime = 0;
         bagStartTime = 0;
         lastDebounceTime = 0;
+        waitForSensorClearOnStart = true;
         Serial.println("Reset sensor states for order switch");
 
         // ĐẶT TRẠNG THÁI RUNNING NẾU isRunning = true
@@ -2922,8 +2929,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             String orderOrderCode = order["orderCode"].as<String>();
             
             // Đánh dấu đơn hiện tại là SELECTED
-            if (orderProductCode == productCodeFromWeb && orderOrderCode == orderCode) {
+            if (orderProductCode == productCodeFromWeb && orderOrderCode == orderCodeFromWeb) {
               order["selected"] = true;
+              order["status"] = isRunningOrder ? "counting" : (keepCount ? "paused" : "waiting");
+              order["currentCount"] = keepCount ? existingCount : 0;
+              order["executeCount"] = keepCount ? existingCount : 0;
               Serial.println("Marked order with productCode " + productCodeFromWeb + " as SELECTED");
             }
           }
@@ -2956,9 +2966,9 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         // XỬ LÝ CHUYỂN SANG ĐƠN HÀNG TIẾP THEO
         Serial.println("Next order command received");
         
-  String productName = doc["productName"].as<String>();
-  String customerName = doc["customerName"].as<String>();
-  String orderCode = doc["orderCode"].as<String>();
+        String productName = doc["productName"].as<String>();
+        String customerNameFromWeb = doc["customerName"].as<String>();
+        String orderCodeFromWeb = doc["orderCode"].as<String>();
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
@@ -2968,8 +2978,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Switching to next order:");
         Serial.println("Product: " + productName);
         Serial.println("Product Code: " + productCodeFromWeb);
-        Serial.println("Customer: " + customerName);
-        Serial.println("Order Code: " + orderCode);
+        Serial.println("Customer: " + customerNameFromWeb);
+        Serial.println("Order Code: " + orderCodeFromWeb);
         Serial.println("Target: " + String(target));
         Serial.println("UnitWeight: " + String(unitWeight, 3));
         Serial.println("Keep Count: " + String(keepCount));
@@ -2977,13 +2987,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         // CẬP NHẬT THÔNG TIN ĐƠN HÀNG MỚI
         bagType = productName;
         productCode = productCodeFromWeb;  // Cập nhật mã sản phẩm
-        orderCode = doc["orderCode"].as<String>();      // Cập nhật biến global
-        customerName = doc["customerName"].as<String>(); // Cập nhật biến global
+        orderCode = orderCodeFromWeb;      // Cập nhật biến global
+        customerName = customerNameFromWeb; // Cập nhật biến global
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
         targetCount = target;
         if (unitWeight <= 0.0f) {
-          unitWeight = resolveUnitWeightFromData(orderCode, productCodeFromWeb, productName);
+          unitWeight = resolveUnitWeightFromData(orderCodeFromWeb, productCodeFromWeb, productName);
         }
         currentOrderUnitWeight = unitWeight;
         Serial.println("Resolved UnitWeight: " + String(currentOrderUnitWeight, 3));
@@ -3000,6 +3010,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         lastBagTime = 0;
         bagStartTime = 0;
         lastDebounceTime = 0;
+        waitForSensorClearOnStart = true;
         Serial.println("Reset sensor states for next order");
         
         // ĐẢM BẢO TRẠNG THÁI ĐANG CHẠY
@@ -3840,12 +3851,6 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["relayDelayAfterComplete"] = relayDelayAfterComplete;
     doc["bagTimeMultiplier"] = bagTimeMultiplier;
     
-    // MQTT settings
-    doc["mqttServer"] = mqtt_server;
-    doc["mqttServerBackup"] = mqtt_server_backup;
-    doc["mqttPort"] = mqtt_port;
-    doc["mqttWebSocketPort"] = mqtt_websocket_port;
-    doc["_mqttUsingBackup"] = mqtt_use_backup;
     doc["realtimePort"] = REALTIME_WS_PORT;
     doc["realtimePath"] = "/ws";
     
@@ -3945,39 +3950,6 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         int oldValue = ::bagTimeMultiplier;
         ::bagTimeMultiplier = doc["bagTimeMultiplier"];
         Serial.println("  bagTimeMultiplier: " + String(oldValue) + "% → " + String(::bagTimeMultiplier) + "%");
-      }
-      
-      // MQTT configuration
-      bool mqttNeedReconnect = false;
-      if (doc.containsKey("mqttServer")) {
-        String oldValue = mqtt_server;
-        mqtt_server = doc["mqttServer"].as<String>();
-        if (oldValue != mqtt_server) {
-          mqttNeedReconnect = true;
-          mqtt_use_backup = false; // Reset về broker chính khi thay đổi
-          Serial.println("  mqttServer: '" + oldValue + "' → '" + mqtt_server + "' (reset to primary)");
-        }
-      }
-      
-      if (doc.containsKey("mqttServerBackup")) {
-        String oldValue = mqtt_server_backup;
-        mqtt_server_backup = doc["mqttServerBackup"].as<String>();
-        Serial.println("  mqttServerBackup: '" + oldValue + "' → '" + mqtt_server_backup + "'");
-      }
-      
-      if (doc.containsKey("mqttPort")) {
-        int oldValue = mqtt_port;
-        mqtt_port = doc["mqttPort"].as<int>();
-        if (oldValue != mqtt_port) {
-          mqttNeedReconnect = true;
-          Serial.println("  mqttPort: " + String(oldValue) + " → " + String(mqtt_port));
-        }
-      }
-      
-      if (doc.containsKey("mqttWebSocketPort")) {
-        int oldValue = mqtt_websocket_port;
-        mqtt_websocket_port = doc["mqttWebSocketPort"].as<int>();
-        Serial.println("  mqttWebSocketPort: " + String(oldValue) + " → " + String(mqtt_websocket_port));
       }
       
       // MQTT2 settings (Server anh Dũng)
@@ -4097,14 +4069,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       Serial.println("  - Min Bag Interval: " + String(::minBagInterval) + "ms");
       Serial.println("  - Auto Reset: " + String(::autoReset ? "true" : "false"));
       Serial.println("  - Relay Delay After Complete: " + String(::relayDelayAfterComplete) + "ms");
-      Serial.println("  - MQTT Server: " + mqtt_server);
-      Serial.println("  - MQTT Port: " + String(mqtt_port));
       if (ethIP.length() > 0) {
         Serial.println("  - Ethernet IP: " + ethIP);
-      }
-      
-      if (mqttNeedReconnect) {
-        Serial.println("Internal MQTT settings are deprecated - realtime now uses WebSocket on port " + String(REALTIME_WS_PORT));
       }
       
       // Reconnect MQTT2 if needed - CHỈ KHI CÓ INTERNET
@@ -4496,7 +4462,6 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     subscribe_topics.add(TOPIC_CMD_START);
     subscribe_topics.add(TOPIC_CMD_PAUSE);
     subscribe_topics.add(TOPIC_CMD_RESET);
-    subscribe_topics.add(TOPIC_CMD_SELECT);
     subscribe_topics.add(TOPIC_CMD_BATCH);
     subscribe_topics.add(TOPIC_CONFIG);
     
@@ -5804,8 +5769,8 @@ int calculateDynamicBagDetectionDelay() {
   }
 
   // Fallback khi productsData rỗng: lấy unitWeight từ ordersData
-  if (!foundWeight) {
-    for (size_t i = 0; i < ordersData.size() && !foundWeight; i++) {
+  if (!foundProductWeight) {
+    for (size_t i = 0; i < ordersData.size() && !foundProductWeight; i++) {
       if (!ordersData[i].containsKey("orders")) continue;
       JsonArray orders = ordersData[i]["orders"];
       for (size_t j = 0; j < orders.size(); j++) {
@@ -5819,8 +5784,8 @@ int calculateDynamicBagDetectionDelay() {
         if (order.containsKey("product") && order["product"].is<JsonObject>() &&
             order["product"].containsKey("unitWeight")) {
           currentProductWeight = order["product"]["unitWeight"].as<float>();
-          foundWeight = currentProductWeight > 0.0f;
-          if (foundWeight) break;
+          foundProductWeight = currentProductWeight > 0.0f;
+          if (foundProductWeight) break;
         }
       }
     }
@@ -6025,8 +5990,8 @@ void updateCount(int bagCount) {
         // Cập nhật executeCount CHỈ cho đơn hàng ĐANG counting
         if (orderProductName == bagType && orderProductCode == productCode && selected && status == "counting") {
           int currentExecuteCount = order["executeCount"] | 0;
-          order["executeCount"] = currentExecuteCount + 1;
-          Serial.println("Updated executeCount for counting order '" + bagType + "' (code: " + productCode + ") from " + String(currentExecuteCount) + " to " + String(currentExecuteCount + 1));
+          order["executeCount"] = currentExecuteCount + bagCount;
+          Serial.println("Updated executeCount for counting order '" + bagType + "' (code: " + productCode + ") from " + String(currentExecuteCount) + " to " + String(currentExecuteCount + bagCount));
           break;
         }
       }
@@ -7040,6 +7005,23 @@ void loop() {
   // Chỉ đếm khi được kích hoạt - SỬ DỤNG SETTINGS ĐỒNG BỘ
   if (isCountingEnabled && isRunning && isStartAuthorized && !isLimitReached) {
     int reading = digitalRead(SENSOR_PIN);
+
+    // Sau khi START/chuyển đơn, chờ sensor về LOW rồi mới cho đếm
+    if (waitForSensorClearOnStart) {
+      if (reading == LOW) {
+        waitForSensorClearOnStart = false;
+        isBagDetected = false;
+        bagStartTime = 0;
+        lastDebounceTime = millis();
+        Serial.println("Sensor clear detected after START, begin counting");
+      } else {
+        if (isBagDetected) {
+          isBagDetected = false;
+        }
+        lastSensorState = reading;
+        reading = lastSensorState;
+      }
+    }
     
     // Sử dụng sensorDelayMs từ settings thay vì debounceDelay cố định
     if (reading != lastSensorState) {
