@@ -2945,12 +2945,12 @@ input[type="checkbox"] {
 }
 
 .sensor-state-high {
-  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
   color: white;
 }
 
 .sensor-state-low {
-  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   color: white;
 }
 

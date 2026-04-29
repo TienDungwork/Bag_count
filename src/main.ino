@@ -164,6 +164,8 @@ PubSubClient mqtt2(ethClient2);
 #define TRIGGER_SENSOR_PIN 4  // Chân cảm biến encoder
 #define START_LED_PIN 38  // relay chạy bắt đầu đếm
 #define DONE_LED_PIN 5   // relay còi báo đến ngưỡng hoàn thành
+const int COUNT_SENSOR_DETECTED_LEVEL = LOW;  // Sensor T61 active-low: có vật cản = LOW
+const int COUNT_SENSOR_CLEAR_LEVEL = HIGH;    // Không có vật cản = HIGH
 //----------------------------------Button
 #define BUTTON_PIN3 2  // Button 3 - đóng relay
 #define BUTTON_PIN2 42  // Button 2 - ngắt relay
@@ -198,10 +200,10 @@ bool isBagDetected = false;         // Đang trong quá trình phát hiện bao
 bool waitingForInterval = false;    // Đang chờ khoảng cách tối thiểu
 
 // Simple timing measurement for web display
-unsigned long sensorHighStartTime = 0;  // Thời gian bắt đầu sensor HIGH
+unsigned long sensorActiveStartTime = 0;  // Thời gian bắt đầu sensor phát hiện vật cản
 unsigned long lastMeasuredTime = 0;     // Thời gian đo được cuối cùng (ms)
 bool isMeasuringSensor = false;          // Đang đo thời gian sensor
-int lastTimingSensorState = LOW;         // Trạng thái sensor dùng riêng cho đo thời gian
+int lastTimingSensorState = COUNT_SENSOR_CLEAR_LEVEL; // Trạng thái sensor dùng riêng cho đo thời gian
 
 // Relay control variables
 unsigned long orderCompleteTime = 0;    // Thời gian hoàn thành đơn hàng
@@ -266,15 +268,15 @@ String currentSystemStatus = "RESET"; // Trạng thái hệ thống: RUNNING, PA
 // Biến để xử lý debounce cho cảm biến  
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 0;
-int lastSensorState = HIGH;
-int sensorState;
+int lastSensorState = COUNT_SENSOR_CLEAR_LEVEL;
+int sensorState = COUNT_SENSOR_CLEAR_LEVEL;
 int lastTriggerState = HIGH;
 int triggerState;
 bool isCountingEnabled = false;  // Biến kiểm soát việc đếm
 bool isTriggerEnabled = false;   // Biến kiểm soát cảm biến khởi động
 bool isCounting = false;    // Biến mới để theo dõi trạng thái đếm
 bool isStartAuthorized = false; // Chỉ cho đếm sau khi nhận START hợp lệ
-bool waitForSensorClearOnStart = false; // Chặn đếm ảo khi START nếu sensor đang HIGH
+bool waitForSensorClearOnStart = false; // Chặn đếm ảo khi START nếu sensor đang bị che
 
 // Biến trạng thái cho LED
 bool startLedOn = false;  // true = sáng (HIGH), false = tắt (LOW)
@@ -2206,8 +2208,8 @@ void publishStatusMQTT() {
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
   doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
-  if (isMeasuringSensor && sensorHighStartTime > 0) {
-    doc["currentMeasuringTime"] = millis() - sensorHighStartTime;
+  if (isMeasuringSensor && sensorActiveStartTime > 0) {
+    doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
   
   // Kiểm tra cảnh báo
@@ -2272,13 +2274,13 @@ void publishSensorData() {
   doc["sensorTriggered"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
   doc["lastTrigger"] = millis();
-  doc["sensorState"] = digitalRead(SENSOR_PIN) == HIGH ? "DETECTED" : "CLEAR";
-  doc["triggerState"] = digitalRead(TRIGGER_SENSOR_PIN) == HIGH ? "DETECTED" : "CLEAR";
+  doc["sensorState"] = digitalRead(SENSOR_PIN) == COUNT_SENSOR_DETECTED_LEVEL ? "DETECTED" : "CLEAR";
+  doc["triggerState"] = digitalRead(TRIGGER_SENSOR_PIN) == LOW ? "DETECTED" : "CLEAR";
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
   doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
-  if (isMeasuringSensor && sensorHighStartTime > 0) {
-    doc["currentMeasuringTime"] = millis() - sensorHighStartTime;
+  if (isMeasuringSensor && sensorActiveStartTime > 0) {
+    doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
   doc["timestamp"] = getTimeStr();
   
@@ -2297,19 +2299,19 @@ void updateSensorTimingMeasurement() {
 
   lastTimingSensorState = currentTimingState;
 
-  if (currentTimingState == HIGH) {
-    sensorHighStartTime = millis();
+  if (currentTimingState == COUNT_SENSOR_DETECTED_LEVEL) {
+    sensorActiveStartTime = millis();
     isMeasuringSensor = true;
-    Serial.println("📏 BẮT ĐẦU đo thời gian sensor HIGH");
+    Serial.println("📏 BẮT ĐẦU đo thời gian sensor ACTIVE");
   } else {
-    if (isMeasuringSensor && sensorHighStartTime > 0) {
-      unsigned long measuredDuration = millis() - sensorHighStartTime;
+    if (isMeasuringSensor && sensorActiveStartTime > 0) {
+      unsigned long measuredDuration = millis() - sensorActiveStartTime;
       lastMeasuredTime = measuredDuration;
       Serial.print("📏 KẾT THÚC đo thời gian sensor: ");
       Serial.print(measuredDuration);
       Serial.println("ms");
     }
-    sensorHighStartTime = 0;
+    sensorActiveStartTime = 0;
     isMeasuringSensor = false;
   }
 
@@ -5440,11 +5442,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     lastMeasuredTime = 0;
     lastTimingSensorState = digitalRead(SENSOR_PIN);
-    if (lastTimingSensorState == HIGH) {
-      sensorHighStartTime = millis();
+    if (lastTimingSensorState == COUNT_SENSOR_DETECTED_LEVEL) {
+      sensorActiveStartTime = millis();
       isMeasuringSensor = true;
     } else {
-      sensorHighStartTime = 0;
+      sensorActiveStartTime = 0;
       isMeasuringSensor = false;
     }
     
@@ -5460,7 +5462,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["isMeasuringSensor"] = isMeasuringSensor;
     doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
     if (isMeasuringSensor) {
-      doc["currentMeasuringTime"] = millis() - sensorHighStartTime;
+      doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
     }
     
     String response;
@@ -6409,9 +6411,9 @@ void updateCount(int bagCount) {
           Serial.println("Found next order - CLEARED relay delay state, relay continues running");
           
           // RESET TRẠNG THÁI SENSOR ĐỂ TRÁNH ĐẾM NHẦM
-          sensorHighStartTime = 0;
-          lastSensorState = HIGH;
-          sensorState = LOW;
+          sensorActiveStartTime = 0;
+          lastSensorState = COUNT_SENSOR_CLEAR_LEVEL;
+          sensorState = COUNT_SENSOR_CLEAR_LEVEL;
           lastBagTime = 0;
           isBagDetected = false;
           waitingForInterval = false;
@@ -7069,9 +7071,9 @@ void loop() {
   if (isCountingEnabled && isRunning && isStartAuthorized && !isLimitReached) {
     int reading = digitalRead(SENSOR_PIN);
 
-    // Sau khi START/chuyển đơn, chờ sensor về LOW rồi mới cho đếm
+    // Sau khi START/chuyển đơn, chờ sensor hết bị che rồi mới cho đếm
     if (waitForSensorClearOnStart) {
-      if (reading == LOW) {
+      if (reading == COUNT_SENSOR_CLEAR_LEVEL) {
         waitForSensorClearOnStart = false;
         isBagDetected = false;
         bagStartTime = 0;
@@ -7082,6 +7084,8 @@ void loop() {
           isBagDetected = false;
         }
         lastSensorState = reading;
+        sensorState = reading;
+        lastDebounceTime = millis();
         reading = lastSensorState;
       }
     }
@@ -7097,9 +7101,9 @@ void loop() {
         
         // IN RA TRẠNG THÁI SENSOR KHI CÓ THAY ĐỔI
         Serial.print("SENSOR THAY ĐỔI: ");
-        Serial.println(sensorState == HIGH ? "HIGH (có vật thể)" : "LOW (không có vật thể)");
+        Serial.println(sensorState == COUNT_SENSOR_DETECTED_LEVEL ? "LOW (có vật thể)" : "HIGH (không có vật thể)");
 
-        if (sensorState == HIGH) {  // HIGH khi phát hiện bao
+        if (sensorState == COUNT_SENSOR_DETECTED_LEVEL) {  // LOW khi phát hiện bao
           unsigned long currentTime = millis();
           
           // Kiểm tra khoảng cách tối thiểu giữa 2 bao (minBagInterval từ settings)
@@ -7124,7 +7128,7 @@ void loop() {
           }
           
         } else {
-          // Sensor đã nhả LOW: kết thúc một lần bao che cảm biến
+          // Sensor đã nhả về CLEAR: kết thúc một lần bao che cảm biến
           if (isBagDetected) {
             unsigned long detectionDuration = millis() - bagStartTime;
             
@@ -7164,7 +7168,7 @@ void loop() {
         }
       }
 
-      // Chỉ xác nhận đếm khi sensor đã nhả LOW. Không cộng lặp khi sensor giữ HIGH
+      // Chỉ xác nhận đếm khi sensor đã nhả về HIGH. Không cộng lặp khi sensor giữ LOW
       // để tránh đếm ảo nếu cảm biến bị che, kẹt tín hiệu hoặc nhiễu.
     }
     lastSensorState = reading;
@@ -7172,7 +7176,7 @@ void loop() {
   } else if (isCountingEnabled && !isRunning) {
     // Đã kích hoạt counting nhưng hệ thống đang pause
     int reading = digitalRead(SENSOR_PIN);
-    if (reading == HIGH) {
+    if (reading == COUNT_SENSOR_DETECTED_LEVEL) {
       Serial.println("Phát hiện bao nhưng hệ thống đang PAUSE");
     }
   }

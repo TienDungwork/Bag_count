@@ -70,7 +70,7 @@ const API_POLL_FREQUENCY = 5000; // 5 seconds - ONLY for products/settings sync,
 let sensorTimingData = {
   lastMeasuredTime: 0,
   isMeasuring: false,
-  currentState: 'LOW'
+  currentState: 'HIGH'
 };
 
 let settings = {
@@ -1289,7 +1289,7 @@ function updateSensorStatus(data) {
     ...sensorTimingData,
     ...data,
     sensorCurrentState: data.sensorCurrentState ||
-      (data.sensorState === 'DETECTED' ? 'HIGH' : 'LOW')
+      (data.sensorState === 'DETECTED' ? 'LOW' : 'HIGH')
   };
 
   const displayElement = document.getElementById('sensorTimingDisplay');
@@ -7620,7 +7620,7 @@ function renderSensorTimingDisplay(data) {
   const displayElement = document.getElementById('sensorTimingDisplay');
   if (!displayElement) return;
 
-  const sensorState = data.sensorCurrentState || data.currentState || 'LOW';
+  const sensorState = data.sensorCurrentState || data.currentState || 'HIGH';
   let html = `
     <div class="sensor-timing-info">
       <div class="timing-row">
