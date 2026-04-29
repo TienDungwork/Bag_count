@@ -173,6 +173,14 @@ const int COUNT_SENSOR_CLEAR_LEVEL = HIGH;    // Không có vật cản = HIGH
 //----------------------------------------IR Remote pin
 #define RECV_PIN 1  // Chân nhận tín hiệu IR
 
+bool isSensorBlocked(int state) {
+  return state == COUNT_SENSOR_DETECTED_LEVEL;
+}
+
+const char* sensorRawStateName(int state) {
+  return state == HIGH ? "HIGH" : "LOW";
+}
+
 //----------------------------------------Settings variables (WEB SYNC - NO DEFAULTS)
 // CÁC BIẾN NÀY SẼ ĐƯỢC LOAD TỪ FILE TRONG setup() - KHÔNG CÓ GIÁ TRỊ MẶC ĐỊNH
 int bagDetectionDelay;              // Thời gian xác nhận 1 bao (ms)
@@ -2192,7 +2200,7 @@ void publishStatusMQTT() {
   }
   lastPublish = millis();
   
-  DynamicJsonDocument doc(768);
+  DynamicJsonDocument doc(1024);
   doc["deviceId"] = conveyorName;   
   doc["status"] = currentSystemStatus; 
   doc["count"] = totalCount;
@@ -2207,7 +2215,10 @@ void publishStatusMQTT() {
   doc["triggerEnabled"] = isTriggerEnabled;
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
-  doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+  int sensorReading = digitalRead(SENSOR_PIN);
+  doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
+  doc["sensorBlocked"] = isSensorBlocked(sensorReading);
+  doc["sensorActiveLevel"] = "LOW";
   if (isMeasuringSensor && sensorActiveStartTime > 0) {
     doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
@@ -2269,16 +2280,19 @@ void publishAlert(String alertType, String message) {
 }
 
 void publishSensorData() {
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(768);
   doc["deviceId"] = conveyorName;
   doc["sensorTriggered"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
   doc["lastTrigger"] = millis();
-  doc["sensorState"] = digitalRead(SENSOR_PIN) == COUNT_SENSOR_DETECTED_LEVEL ? "DETECTED" : "CLEAR";
+  int sensorReading = digitalRead(SENSOR_PIN);
+  doc["sensorState"] = isSensorBlocked(sensorReading) ? "DETECTED" : "CLEAR";
   doc["triggerState"] = digitalRead(TRIGGER_SENSOR_PIN) == LOW ? "DETECTED" : "CLEAR";
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
-  doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+  doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
+  doc["sensorBlocked"] = isSensorBlocked(sensorReading);
+  doc["sensorActiveLevel"] = "LOW";
   if (isMeasuringSensor && sensorActiveStartTime > 0) {
     doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
@@ -2299,10 +2313,10 @@ void updateSensorTimingMeasurement() {
 
   lastTimingSensorState = currentTimingState;
 
-  if (currentTimingState == COUNT_SENSOR_DETECTED_LEVEL) {
+  if (isSensorBlocked(currentTimingState)) {
     sensorActiveStartTime = millis();
     isMeasuringSensor = true;
-    Serial.println("📏 BẮT ĐẦU đo thời gian sensor ACTIVE");
+    Serial.println("📏 BẮT ĐẦU đo thời gian sensor LOW (có vật chắn)");
   } else {
     if (isMeasuringSensor && sensorActiveStartTime > 0) {
       unsigned long measuredDuration = millis() - sensorActiveStartTime;
@@ -3921,7 +3935,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     // Sensor timing measurement info
     doc["lastMeasuredTime"] = lastMeasuredTime;
     doc["isMeasuringSensor"] = isMeasuringSensor;
-    doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+    int sensorReading = digitalRead(SENSOR_PIN);
+    doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
+    doc["sensorBlocked"] = isSensorBlocked(sensorReading);
+    doc["sensorActiveLevel"] = "LOW";
     
     // Add debug info about settings source
     doc["_debug"] = LittleFS.exists("/settings.json") ? "file" : "defaults";
@@ -5442,7 +5459,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     lastMeasuredTime = 0;
     lastTimingSensorState = digitalRead(SENSOR_PIN);
-    if (lastTimingSensorState == COUNT_SENSOR_DETECTED_LEVEL) {
+    if (isSensorBlocked(lastTimingSensorState)) {
       sensorActiveStartTime = millis();
       isMeasuringSensor = true;
     } else {
@@ -5457,10 +5474,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
   server.on("/api/sensor-timing", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
-    DynamicJsonDocument doc(256);
+    DynamicJsonDocument doc(384);
     doc["lastMeasuredTime"] = lastMeasuredTime;
     doc["isMeasuringSensor"] = isMeasuringSensor;
-    doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+    int sensorReading = digitalRead(SENSOR_PIN);
+    doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
+    doc["sensorBlocked"] = isSensorBlocked(sensorReading);
+    doc["sensorActiveLevel"] = "LOW";
     if (isMeasuringSensor) {
       doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
     }
@@ -6763,6 +6783,12 @@ void setup() {
   pinMode(BUTTON_PIN3, INPUT_PULLUP);
   pinMode(BUTTON_PIN2, INPUT_PULLUP);
   lastTimingSensorState = digitalRead(SENSOR_PIN);
+  sensorState = lastTimingSensorState;
+  lastSensorState = lastTimingSensorState;
+  if (isSensorBlocked(lastTimingSensorState)) {
+    sensorActiveStartTime = millis();
+    isMeasuringSensor = true;
+  }
   
   // Khởi tạo IR Remote
   irrecv.enableIRIn();
@@ -7073,7 +7099,7 @@ void loop() {
 
     // Sau khi START/chuyển đơn, chờ sensor hết bị che rồi mới cho đếm
     if (waitForSensorClearOnStart) {
-      if (reading == COUNT_SENSOR_CLEAR_LEVEL) {
+      if (!isSensorBlocked(reading)) {
         waitForSensorClearOnStart = false;
         isBagDetected = false;
         bagStartTime = 0;
@@ -7101,9 +7127,9 @@ void loop() {
         
         // IN RA TRẠNG THÁI SENSOR KHI CÓ THAY ĐỔI
         Serial.print("SENSOR THAY ĐỔI: ");
-        Serial.println(sensorState == COUNT_SENSOR_DETECTED_LEVEL ? "LOW (có vật thể)" : "HIGH (không có vật thể)");
+        Serial.println(isSensorBlocked(sensorState) ? "LOW (có vật thể)" : "HIGH (không có vật thể)");
 
-        if (sensorState == COUNT_SENSOR_DETECTED_LEVEL) {  // LOW khi phát hiện bao
+        if (isSensorBlocked(sensorState)) {  // LOW khi phát hiện bao
           unsigned long currentTime = millis();
           
           // Kiểm tra khoảng cách tối thiểu giữa 2 bao (minBagInterval từ settings)
@@ -7176,7 +7202,7 @@ void loop() {
   } else if (isCountingEnabled && !isRunning) {
     // Đã kích hoạt counting nhưng hệ thống đang pause
     int reading = digitalRead(SENSOR_PIN);
-    if (reading == COUNT_SENSOR_DETECTED_LEVEL) {
+    if (isSensorBlocked(reading)) {
       Serial.println("Phát hiện bao nhưng hệ thống đang PAUSE");
     }
   }

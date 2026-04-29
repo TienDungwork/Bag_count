@@ -2954,6 +2954,16 @@ input[type="checkbox"] {
   color: white;
 }
 
+.sensor-state-blocked {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.sensor-state-clear {
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  color: white;
+}
+
 /* Checkmark styling for checkbox-label */
 .checkbox-label {
   display: flex;

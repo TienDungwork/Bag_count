@@ -7621,11 +7621,16 @@ function renderSensorTimingDisplay(data) {
   if (!displayElement) return;
 
   const sensorState = data.sensorCurrentState || data.currentState || 'HIGH';
+  const sensorBlocked = data.sensorBlocked !== undefined
+    ? Boolean(data.sensorBlocked)
+    : (data.sensorState === 'DETECTED' || sensorState === 'LOW');
+  const sensorStateClass = sensorBlocked ? 'sensor-state-blocked' : 'sensor-state-clear';
+  const sensorStateLabel = `${sensorState} (${sensorBlocked ? 'có vật' : 'không có vật'})`;
   let html = `
     <div class="sensor-timing-info">
       <div class="timing-row">
         <span class="timing-label">Trạng thái sensor:</span>
-        <span class="timing-value sensor-state-${sensorState.toLowerCase()}">${sensorState}</span>
+        <span class="timing-value ${sensorStateClass}">${sensorStateLabel}</span>
       </div>
       <div class="timing-row">
         <span class="timing-label">Thời gian đo cuối:</span>
