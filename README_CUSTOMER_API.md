@@ -18,7 +18,8 @@ ESP32 sẽ trả về một đối tượng JSON có cấu trúc như sau:
   "startTime": "14:30 - 15/12/2024",
   "setMode": "output",
   "location": "Khu vực A",
-  "conveyor": "Băng tải 01"
+  "conveyor": "Băng tải 01",
+  "sensorTimeMs": 2450
 }
 ```
 
@@ -37,3 +38,4 @@ ESP32 sẽ trả về một đối tượng JSON có cấu trúc như sau:
 | `setMode` | String | Loại hình  | `"output/input(Nhập hoặc xuất)"` |
 | `location` | String | Địa điểm | `"Hà Nội"` |
 | `conveyor` | String | Số hiệu băng tải | `"BT-001"` |
+| `sensorTimeMs` | INT | Thời gian sensor HIGH đo được gần nhất, đơn vị ms | `2450` |

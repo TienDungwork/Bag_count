@@ -1281,7 +1281,21 @@ async function handleDeviceAlert(data) {
 
 function updateSensorStatus(data) {
   //console.log('Sensor update:', data);
-  // Update sensor status indicators in UI
+  if (data.lastMeasuredTime === undefined && data.currentMeasuringTime === undefined) {
+    return;
+  }
+
+  sensorTimingData = {
+    ...sensorTimingData,
+    ...data,
+    sensorCurrentState: data.sensorCurrentState ||
+      (data.sensorState === 'DETECTED' ? 'HIGH' : 'LOW')
+  };
+
+  const displayElement = document.getElementById('sensorTimingDisplay');
+  if (displayElement) {
+    renderSensorTimingDisplay(sensorTimingData);
+  }
 }
 
 function updateHeartbeat(data) {
@@ -7602,39 +7616,43 @@ function updateUnitWeightOptions() {
 }
 
 // Sensor Timing Functions
+function renderSensorTimingDisplay(data) {
+  const displayElement = document.getElementById('sensorTimingDisplay');
+  if (!displayElement) return;
+
+  const sensorState = data.sensorCurrentState || data.currentState || 'LOW';
+  let html = `
+    <div class="sensor-timing-info">
+      <div class="timing-row">
+        <span class="timing-label">Trạng thái sensor:</span>
+        <span class="timing-value sensor-state-${sensorState.toLowerCase()}">${sensorState}</span>
+      </div>
+      <div class="timing-row">
+        <span class="timing-label">Thời gian đo cuối:</span>
+        <span class="timing-value">${data.lastMeasuredTime > 0 ? data.lastMeasuredTime + 'ms' : 'Chưa có'}</span>
+      </div>
+  `;
+
+  if (data.isMeasuringSensor && data.currentMeasuringTime !== undefined) {
+    html += `
+      <div class="timing-row measuring">
+        <span class="timing-label">Đang đo:</span>
+        <span class="timing-value timing-active">${data.currentMeasuringTime}ms</span>
+      </div>
+    `;
+  }
+
+  html += '</div>';
+  displayElement.innerHTML = html;
+}
+
 async function updateSensorTimingDisplay() {
   try {
     const response = await fetch('/api/sensor-timing');
     if (response.ok) {
       const data = await response.json();
       sensorTimingData = data;
-      
-      const displayElement = document.getElementById('sensorTimingDisplay');
-      if (displayElement) {
-        let html = `
-          <div class="sensor-timing-info">
-            <div class="timing-row">  
-              <span class="timing-label">Trạng thái sensor:</span>
-              <span class="timing-value sensor-state-${data.sensorCurrentState.toLowerCase()}">${data.sensorCurrentState}</span>
-            </div>
-            <div class="timing-row">
-              <span class="timing-label">Thời gian đo cuối:</span>
-              <span class="timing-value">${data.lastMeasuredTime > 0 ? data.lastMeasuredTime + 'ms' : 'Chưa có'}</span>
-            </div>
-        `;
-        
-        if (data.isMeasuringSensor && data.currentMeasuringTime !== undefined) {
-          html += `
-            <div class="timing-row measuring">
-              <span class="timing-label">Đang đo:</span>
-              <span class="timing-value timing-active">${data.currentMeasuringTime}ms</span>
-            </div>
-          `;
-        } 
-        
-        html += '</div>';
-        displayElement.innerHTML = html;
-      }
+      renderSensorTimingDisplay(data);
     }
   } catch (error) {
     console.error('Error updating sensor timing:', error);

@@ -201,6 +201,7 @@ bool waitingForInterval = false;    // Đang chờ khoảng cách tối thiểu
 unsigned long sensorHighStartTime = 0;  // Thời gian bắt đầu sensor HIGH
 unsigned long lastMeasuredTime = 0;     // Thời gian đo được cuối cùng (ms)
 bool isMeasuringSensor = false;          // Đang đo thời gian sensor
+int lastTimingSensorState = LOW;         // Trạng thái sensor dùng riêng cho đo thời gian
 
 // Relay control variables
 unsigned long orderCompleteTime = 0;    // Thời gian hoàn thành đơn hàng
@@ -326,6 +327,7 @@ void saveBagConfigsToFile();
 void publishStatusMQTT();
 void publishBagConfigs();
 void displayCurrentOrderInfo();
+void updateSensorTimingMeasurement();
 int calculateDynamicBagDetectionDelay();  // Weight-based delay calculation
 int calculateBagCountFromDuration(unsigned long detectionDuration);  // Calculate bag count from detection time
 void updateCount();  // Default update count by 1
@@ -366,6 +368,7 @@ void handleIRCommand(int button) {
       isTriggerEnabled = true;
       isCountingEnabled = true;
       isStartAuthorized = true;
+      waitForSensorClearOnStart = true;
       currentSystemStatus = "RUNNING";
       isRunning = true;
       isTriggerEnabled = true;
@@ -1714,7 +1717,7 @@ void publishMQTT2OrderComplete() {
   // Tạo topic theo format: devices/{KeyLogin}/Transaction
   String mqtt2_topic_transaction = "devices/" + mqtt2_password + "/Transaction";
   
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(768);
   
   // 1. orderCode - Mã đơn hàng hiện tại
   doc["orderCode"] = orderCode;
@@ -1765,6 +1768,9 @@ void publishMQTT2OrderComplete() {
 
   // 11. băng tải
   doc["conveyor"] = conveyorName;
+
+  // 12. thời gian sensor đo được cho bao/nhóm bao gần nhất
+  doc["sensorTimeMs"] = (long)lastMeasuredTime;
   
   // Serialize JSON
   String message;
@@ -2184,7 +2190,7 @@ void publishStatusMQTT() {
   }
   lastPublish = millis();
   
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(768);
   doc["deviceId"] = conveyorName;   
   doc["status"] = currentSystemStatus; 
   doc["count"] = totalCount;
@@ -2197,6 +2203,12 @@ void publishStatusMQTT() {
   doc["limitReached"] = isLimitReached;
   doc["sensorEnabled"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
+  doc["lastMeasuredTime"] = lastMeasuredTime;
+  doc["isMeasuringSensor"] = isMeasuringSensor;
+  doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+  if (isMeasuringSensor && sensorHighStartTime > 0) {
+    doc["currentMeasuringTime"] = millis() - sensorHighStartTime;
+  }
   
   // Kiểm tra cảnh báo
   for (auto& cfg : bagConfigs) {
@@ -2255,19 +2267,53 @@ void publishAlert(String alertType, String message) {
 }
 
 void publishSensorData() {
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(512);
   doc["deviceId"] = conveyorName;
   doc["sensorTriggered"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
   doc["lastTrigger"] = millis();
   doc["sensorState"] = digitalRead(SENSOR_PIN) == HIGH ? "DETECTED" : "CLEAR";
   doc["triggerState"] = digitalRead(TRIGGER_SENSOR_PIN) == HIGH ? "DETECTED" : "CLEAR";
+  doc["lastMeasuredTime"] = lastMeasuredTime;
+  doc["isMeasuringSensor"] = isMeasuringSensor;
+  doc["sensorCurrentState"] = digitalRead(SENSOR_PIN) == HIGH ? "HIGH" : "LOW";
+  if (isMeasuringSensor && sensorHighStartTime > 0) {
+    doc["currentMeasuringTime"] = millis() - sensorHighStartTime;
+  }
   doc["timestamp"] = getTimeStr();
   
   String message;
   serializeJson(doc, message);
 
   broadcastRealtimeMessage(TOPIC_SENSOR, message);
+}
+
+void updateSensorTimingMeasurement() {
+  int currentTimingState = digitalRead(SENSOR_PIN);
+
+  if (currentTimingState == lastTimingSensorState) {
+    return;
+  }
+
+  lastTimingSensorState = currentTimingState;
+
+  if (currentTimingState == HIGH) {
+    sensorHighStartTime = millis();
+    isMeasuringSensor = true;
+    Serial.println("📏 BẮT ĐẦU đo thời gian sensor HIGH");
+  } else {
+    if (isMeasuringSensor && sensorHighStartTime > 0) {
+      unsigned long measuredDuration = millis() - sensorHighStartTime;
+      lastMeasuredTime = measuredDuration;
+      Serial.print("📏 KẾT THÚC đo thời gian sensor: ");
+      Serial.print(measuredDuration);
+      Serial.println("ms");
+    }
+    sensorHighStartTime = 0;
+    isMeasuringSensor = false;
+  }
+
+  publishSensorData();
 }
 
 void publishHeartbeat() {
@@ -5393,8 +5439,14 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
     lastMeasuredTime = 0;
-    isMeasuringSensor = false;
-    sensorHighStartTime = 0;
+    lastTimingSensorState = digitalRead(SENSOR_PIN);
+    if (lastTimingSensorState == HIGH) {
+      sensorHighStartTime = millis();
+      isMeasuringSensor = true;
+    } else {
+      sensorHighStartTime = 0;
+      isMeasuringSensor = false;
+    }
     
     Serial.println("📏 Sensor timing cleared");
     server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Sensor timing cleared\"}");
@@ -5472,7 +5524,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     // 7. location - Địa điểm đặt băng tải
     doc["location"] = location;
-    
+
+    doc["target"] = (int)targetCount;
+    doc["count"] = (long)totalCount;
+    doc["conveyor"] = conveyorName;
+    doc["sensorTimeMs"] = (long)lastMeasuredTime;
     
     String out;
     serializeJson(doc, out);
@@ -6361,6 +6417,7 @@ void updateCount(int bagCount) {
           waitingForInterval = false;
           bagStartTime = 0;
           lastDebounceTime = 0;
+          waitForSensorClearOnStart = true;
           Serial.println("Sensor state cleared");
           
           // Đã tìm thấy đơn tiếp theo - gửi thông tin lên web
@@ -6450,6 +6507,7 @@ void updateCount(int bagCount) {
             
             // GIỮ NGUYÊN trạng thái running
             isLimitReached = false;
+            waitForSensorClearOnStart = true;
             
             foundNextOrder = true;
             
@@ -6702,6 +6760,7 @@ void setup() {
   pinMode(DONE_LED_PIN, OUTPUT);
   pinMode(BUTTON_PIN3, INPUT_PULLUP);
   pinMode(BUTTON_PIN2, INPUT_PULLUP);
+  lastTimingSensorState = digitalRead(SENSOR_PIN);
   
   // Khởi tạo IR Remote
   irrecv.enableIRIn();
@@ -6978,6 +7037,10 @@ void loop() {
     irrecv.resume(); // Chuẩn bị nhận tiếp
   }
 
+  // Đo thời gian sensor độc lập với trạng thái START/PAUSE để màn hình cài đặt
+  // luôn nhận được thời gian bao đi qua cảm biến.
+  updateSensorTimingMeasurement();
+
   // Chỉ xử lý cảm biến khởi động khi được kích hoạt
   if (isTriggerEnabled) {
     int triggerReading = digitalRead(TRIGGER_SENSOR_PIN);
@@ -7032,22 +7095,6 @@ void loop() {
       if (reading != sensorState) {
         sensorState = reading;
         
-        // ĐO THỜI GIAN SENSOR ĐƠN GIẢN (không bị ảnh hưởng bởi các cài đặt khác)
-        if (sensorState == HIGH) {
-          // Bắt đầu đo thời gian khi sensor HIGH
-          sensorHighStartTime = millis();
-          isMeasuringSensor = true;
-          Serial.println("📏 BẮT ĐẦU đo thời gian sensor HIGH");
-        } else if (sensorState == LOW && isMeasuringSensor) {
-          // Kết thúc đo thời gian khi sensor LOW
-          unsigned long measuredDuration = millis() - sensorHighStartTime;
-          lastMeasuredTime = measuredDuration;
-          isMeasuringSensor = false;
-          Serial.print("📏 KẾT THÚC đo thời gian sensor: ");
-          Serial.print(measuredDuration);
-          Serial.println("ms");
-        }
-        
         // IN RA TRẠNG THÁI SENSOR KHI CÓ THAY ĐỔI
         Serial.print("SENSOR THAY ĐỔI: ");
         Serial.println(sensorState == HIGH ? "HIGH (có vật thể)" : "LOW (không có vật thể)");
@@ -7077,7 +7124,7 @@ void loop() {
           }
           
         } else {
-          // Sensor không phát hiện (HIGH)
+          // Sensor đã nhả LOW: kết thúc một lần bao che cảm biến
           if (isBagDetected) {
             unsigned long detectionDuration = millis() - bagStartTime;
             
@@ -7117,51 +7164,8 @@ void loop() {
         }
       }
 
-      // THÊM: Kiểm tra thời gian phát hiện liên tục khi sensor vẫn HIGH
-      if (sensorState == HIGH && isBagDetected) {
-        unsigned long currentTime = millis();
-        unsigned long detectionDuration = currentTime - bagStartTime;
-        unsigned long timeSinceLastBag = currentTime - lastBagTime;
-        
-        // DEBUG: In thông tin về minBagInterval
-        if (detectionDuration >= calculateDynamicBagDetectionDelay()) {
-          Serial.print("DEBUG liên tục: detectionDuration=");
-          Serial.print(detectionDuration);
-          Serial.print("ms, timeSinceLastBag=");
-          Serial.print(timeSinceLastBag);
-          Serial.print("ms, minBagInterval=");
-          Serial.print(minBagInterval);
-          Serial.print("ms, cần chờ thêm=");
-          Serial.print(minBagInterval > timeSinceLastBag ? minBagInterval - timeSinceLastBag : 0);
-          Serial.println("ms");
-        }
-        
-        if (detectionDuration >= calculateDynamicBagDetectionDelay() && currentTime - lastBagTime >= minBagInterval) {
-          // ĐỦ THỜI GIAN XÁC NHẬN → ĐẾMMM BAO!
-          int dynamicDelay = calculateDynamicBagDetectionDelay();
-          int bagCount = calculateBagCountFromDuration(detectionDuration);
-          Serial.print("XÁC NHẬN BAO (liên tục)! Thời gian: ");
-          Serial.print(detectionDuration);
-          Serial.print("ms >= ");
-          Serial.print(dynamicDelay);
-          Serial.print("ms. Phát hiện ");
-          Serial.print(bagCount);
-          Serial.print(" bao. Count: ");
-          Serial.print(totalCount);
-          Serial.print(" -> ");
-          Serial.println(totalCount + bagCount);
-          
-          updateCount(bagCount);
-          needUpdate = true;
-          lastBagTime = currentTime;
-          
-          // KHÔNG RESET isBagDetected - chỉ reset thời gian bắt đầu để đếm tiếp theo
-          bagStartTime = currentTime; // Reset thời gian để chuẩn bị cho lần đếm tiếp theo
-          
-          // MQTT: Publish sensor data
-          publishSensorData();
-        }
-      }
+      // Chỉ xác nhận đếm khi sensor đã nhả LOW. Không cộng lặp khi sensor giữ HIGH
+      // để tránh đếm ảo nếu cảm biến bị che, kẹt tín hiệu hoặc nhiễu.
     }
     lastSensorState = reading;
     
