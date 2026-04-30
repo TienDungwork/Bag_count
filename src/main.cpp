@@ -1,6 +1,7 @@
 
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Bag Counter Display
+#include <Arduino.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "esp_task_wdt.h"
@@ -333,8 +334,12 @@ void broadcastRealtimeMessage(const char* topic, const String& payloadJson);
 void sendRealtimeSnapshot(AsyncWebSocketClient *client);
 void showConnectingDisplay();
 void setSystemConnected();
+void loadCurrentOrderForDisplay();
+void createDefaultSettingsFile();
 void saveBagConfigsToFile();
 void publishStatusMQTT();
+void publishSensorData();
+void publishHeartbeat();
 void publishBagConfigs();
 void displayCurrentOrderInfo();
 void updateSensorTimingMeasurement();
