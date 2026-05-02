@@ -11,101 +11,65 @@
   <!-- Header -->
   <div class="app-header">
     <div class="header-content">
-      <h1><i class="fas fa-conveyor-belt"></i> HỆ THỐNG ĐẾM BAO</h1>
-      <div class="conveyor-info">
-        <span class="conveyor-label">BĂNG TẢI:</span>
-        <span class="conveyor-id conveyor-name" id="conveyorId">BT-001</span>
+      <div class="header-top-row">
+        <div class="header-title-block">
+          <h1><i class="fas fa-conveyor-belt"></i> HỆ THỐNG ĐẾM BAO</h1>
+          <div class="conveyor-info">
+            <span class="conveyor-label">Băng tải:</span>
+            <span class="conveyor-id conveyor-name" id="conveyorId">BT-001</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div class="device-status-indicator online" id="deviceStatusIndicator">
+            <span class="status-text">Online</span>
+          </div>
+          <div class="online-time"><span id="headerOnlineTime">--:--:--</span></div>
+          <div class="nav-menu">
+          <button class="menu-toggle" type="button" onclick="toggleMainMenu()" aria-label="Mở menu" aria-expanded="false">
+            <span class="hamburger-icon" aria-hidden="true">&#9776;</span>
+            <span class="menu-text">MENU</span>
+            <span id="activeMenuLabel">Tổng quan</span>
+          </button>
+          <div class="tab-navigation" id="mainTabMenu">
+            <button class="tab-btn active" data-tab="overview" onclick="showTab('overview')">
+              <i class="fas fa-tachometer-alt"></i>
+              <span>Tổng quan</span>
+            </button>
+            <button class="tab-btn" data-tab="history" onclick="showTab('history')">
+              <i class="fas fa-history"></i>
+              <span>Lịch sử đếm</span>
+            </button>
+            <button class="tab-btn" data-tab="order" onclick="showTab('order')">
+              <i class="fas fa-plus-circle"></i>
+              <span>Thêm đơn hàng</span>
+            </button>
+            <button class="tab-btn" data-tab="product" onclick="showTab('product')">
+              <i class="fas fa-box"></i>
+              <span>Cài đặt SP</span>
+            </button>
+            <button class="tab-btn" data-tab="wifi" onclick="showTab('wifi')">
+              <i class="fas fa-wifi"></i>
+              <span>Cấu hình WiFi</span>
+            </button>
+            <button class="tab-btn" data-tab="settings" onclick="showTab('settings')">
+              <i class="fas fa-cog"></i>
+              <span>Cài đặt chung</span>
+            </button>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   </div>
 
   <!-- Main Container -->
   <div class="main-container">
-    <!-- Device Status Indicator -->
-    <div class="device-status-indicator online" id="deviceStatusIndicator">
-      <span class="status-text">Thiết bị đã kết nối</span>
-    </div>
-    
-    <!-- Tab Navigation -->
-    <div class="tab-navigation">
-      <button class="tab-btn active" data-tab="overview" onclick="showTab('overview')">
-        <i class="fas fa-tachometer-alt"></i>
-        <span>Tổng quan</span>
-      </button>
-      <button class="tab-btn" data-tab="history" onclick="showTab('history')">
-        <i class="fas fa-history"></i>
-        <span>Lịch sử đếm</span>
-      </button>
-      <button class="tab-btn" data-tab="order" onclick="showTab('order')">
-        <i class="fas fa-plus-circle"></i>
-        <span>Thêm đơn hàng</span>
-      </button>
-      <button class="tab-btn" data-tab="product" onclick="showTab('product')">
-        <i class="fas fa-box"></i>
-        <span>Cài đặt SP</span>
-      </button>
-      <button class="tab-btn" data-tab="wifi" onclick="showTab('wifi')">
-        <i class="fas fa-wifi"></i>
-        <span>Cấu hình WiFi</span>
-      </button>
-      <button class="tab-btn" data-tab="settings" onclick="showTab('settings')">
-        <i class="fas fa-cog"></i>
-        <span>Cài đặt chung</span>
-      </button>
-    </div>
-
     <!-- Tab Content -->
     <div class="tab-content">
       <!-- Tổng quan Tab -->
       <div class="tab-pane active" id="overview">
         <div class="overview-section">
-          <!-- Order Info Section -->
-          <div class="order-info-section">
-            <div class="section-header">
-              <h3><i class="fas fa-info-circle"></i> Thông tin đơn hàng</h3>
-              <button class="add-order-btn" onclick="showTab('order')">
-                <i class="fas fa-plus"></i> Tạo đơn hàng mới
-              </button>
-            </div>
-            
-            <!-- Current Batch Info Display -->
-            <div class="batch-info-display" id="batchInfoDisplay" style="display: none; margin: 10px 0; padding: 10px; background: #f0f8ff; border-left: 4px solid #007bff; border-radius: 4px;">
-              <!-- Dynamic content will be filled by JavaScript -->
-            </div>
-
-            <!-- Control Buttons -->
-            <div class="control-buttons">
-              <button class="control-btn input-btn" onclick="setMode('input')">
-                <i class="fas fa-sign-in-alt"></i>
-                NHẬP
-              </button>
-              <button class="control-btn output-btn active" onclick="setMode('output')">
-                <i class="fas fa-sign-out-alt"></i>
-                XUẤT
-              </button>
-            </div>
-
-            <!-- Time Info -->
-            <div class="time-info">
-              <div class="time-item">
-                <label>Thời gian bắt đầu:</label>
-                <span id="startTime">--:-- - --/--/----</span>
-              </div>
-            </div>
-
-            <!-- Plan vs Execute -->
-            <div class="plan-execute">
-              <div class="plan-item">
-                <label>Kế hoạch:</label>
-                <span id="planCount">0</span>
-              </div>
-              <div class="execute-item">
-                <label>Thực hiện:</label>
-                <span id="executeCount">0</span>
-              </div>
-            </div>
-          </div>
-
           <!-- Order List Table -->
           <div class="order-list-section">
             <div class="section-header">
@@ -124,25 +88,7 @@
             <!-- Pagination -->
             <div class="pagination-container" id="paginationContainer">
               <div class="pagination-info">
-                <span>Trang <span id="currentPage">1</span> / <span id="totalPages">1</span></span>
-                <span>(<span id="showingFrom">0</span>-<span id="showingTo">0</span> / <span id="totalItems">0</span> đơn hàng)</span>
-              </div>
-              <div class="pagination-controls">
-                <button class="page-btn" onclick="goToPage('first')" id="firstPageBtn" disabled>
-                  <i class="fas fa-angle-double-left"></i>
-                </button>
-                <button class="page-btn" onclick="goToPage('prev')" id="prevPageBtn" disabled>
-                  <i class="fas fa-angle-left"></i>
-                </button>
-                <div class="page-numbers" id="pageNumbers">
-                  <!-- Dynamic page numbers -->
-                </div>
-                <button class="page-btn" onclick="goToPage('next')" id="nextPageBtn" disabled>
-                  <i class="fas fa-angle-right"></i>
-                </button>
-                <button class="page-btn" onclick="goToPage('last')" id="lastPageBtn" disabled>
-                  <i class="fas fa-angle-double-right"></i>
-                </button>
+                <span><span id="totalItems">0</span> đơn hàng</span>
               </div>
             </div>
             
@@ -170,20 +116,67 @@
             </div>
           </div>
 
-          <!-- Action Buttons -->
-          <div class="action-buttons">
-            <button id="startBtn" class="action-btn start-btn" onclick="startCounting()">
-              <i class="fas fa-play"></i>
-              Bắt đầu
-            </button>
-            <button id="pauseBtn" class="action-btn pause-btn" onclick="pauseCounting()">
-              <i class="fas fa-pause"></i>
-              Tạm dừng
-            </button>
-            <button id="resetBtn" class="action-btn reset-btn" onclick="resetCounting()">
-              <i class="fas fa-redo"></i>
-              Reset
-            </button>
+          <!-- Order Info Section -->
+          <div class="order-info-section">
+            <div class="section-header">
+              <h3><i class="fas fa-sliders-h"></i> Điều khiển</h3>
+              <button class="add-order-btn" onclick="showTab('order')">
+                <i class="fas fa-plus"></i> Tạo đơn
+              </button>
+            </div>
+            
+            <!-- Current Batch Info Display -->
+            <div class="batch-info-display" id="batchInfoDisplay" style="display: none; margin: 8px 0; padding: 8px; background: #f0f8ff; border-left: 4px solid #007bff; border-radius: 4px;">
+              <!-- Dynamic content will be filled by JavaScript -->
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="control-buttons">
+              <button class="control-btn input-btn" onclick="setMode('input')">
+                <i class="fas fa-sign-in-alt"></i>
+                NHẬP
+              </button>
+              <button class="control-btn output-btn active" onclick="setMode('output')">
+                <i class="fas fa-sign-out-alt"></i>
+                XUẤT
+              </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+              <button id="startBtn" class="action-btn start-btn" onclick="startCounting()">
+                <i class="fas fa-play"></i>
+                Bắt đầu
+              </button>
+              <button id="pauseBtn" class="action-btn pause-btn" onclick="pauseCounting()">
+                <i class="fas fa-pause"></i>
+                Tạm dừng
+              </button>
+              <button id="resetBtn" class="action-btn reset-btn" onclick="resetCounting()">
+                <i class="fas fa-redo"></i>
+                Reset
+              </button>
+            </div>
+
+            <!-- Time Info -->
+            <div class="time-info">
+              <div class="time-item">
+                <label>Thời gian bắt đầu</label>
+                <span id="startTime">--:-- - --/--/----</span>
+              </div>
+            </div>
+
+            <!-- Plan vs Execute -->
+            <div class="plan-execute">
+              <div class="plan-item">
+                <label>Kế hoạch</label>
+                <span id="planCount">0</span>
+              </div>
+              <div class="execute-item">
+                <label>Thực hiện</label>
+                <span id="executeCount">0</span>
+              </div>
+            </div>
           </div>
 
         </div>

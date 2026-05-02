@@ -1318,6 +1318,8 @@ function updateHeartbeat(data) {
     onlineIndicator.textContent = 'Online';
     onlineIndicator.style.color = 'green';
   }
+
+  updateHeaderOnlineTime(data.uptime);
 }
 
 // Kiểm tra heartbeat timeout để phát hiện mất kết nối thiết bị
@@ -1375,10 +1377,25 @@ function updateDeviceConnectionStatus(connected) {
     deviceStatusIndicator.className = `device-status-indicator ${connected ? 'online' : 'offline'}`;
     const statusText = deviceStatusIndicator.querySelector('.status-text');
     if (statusText) {
-      statusText.textContent = connected ? 'Thiết bị đã kết nối' : 'Thiết bị mất kết nối';
+      statusText.textContent = connected ? 'Online' : 'Offline';
     }
   }
 }
+
+function updateHeaderOnlineTime() {
+  const onlineTimeElement = document.getElementById('headerOnlineTime');
+  if (onlineTimeElement) {
+    onlineTimeElement.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  }
+}
+
+setInterval(updateHeaderOnlineTime, 1000);
+updateHeaderOnlineTime();
 
 // Khởi động device monitoring
 function startDeviceMonitoring() {
@@ -2505,7 +2522,8 @@ function updateBatchDisplay() {
 
 // Pagination Functions
 function updatePagination(orders) {
-  totalPages = Math.ceil(orders.length / itemsPerPage);
+  totalPages = 1;
+  currentPage = 1;
   
   const currentPageElement = document.getElementById('currentPage');
   const totalPagesElement = document.getElementById('totalPages');
@@ -2513,29 +2531,12 @@ function updatePagination(orders) {
   const showingToElement = document.getElementById('showingTo');
   const totalItemsElement = document.getElementById('totalItems');
   
-  if (currentPageElement) currentPageElement.textContent = currentPage;
-  if (totalPagesElement) totalPagesElement.textContent = totalPages;
+  if (currentPageElement) currentPageElement.textContent = '1';
+  if (totalPagesElement) totalPagesElement.textContent = '1';
   if (totalItemsElement) totalItemsElement.textContent = orders.length;
   
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, orders.length);
-  
-  if (showingFromElement) showingFromElement.textContent = orders.length > 0 ? startIndex + 1 : 0;
-  if (showingToElement) showingToElement.textContent = endIndex;
-  
-  // Update pagination buttons
-  const firstPageBtn = document.getElementById('firstPageBtn');
-  const prevPageBtn = document.getElementById('prevPageBtn');
-  const nextPageBtn = document.getElementById('nextPageBtn');
-  const lastPageBtn = document.getElementById('lastPageBtn');
-  
-  if (firstPageBtn) firstPageBtn.disabled = currentPage === 1;
-  if (prevPageBtn) prevPageBtn.disabled = currentPage === 1;
-  if (nextPageBtn) nextPageBtn.disabled = currentPage === totalPages;
-  if (lastPageBtn) lastPageBtn.disabled = currentPage === totalPages;
-  
-  // Update page numbers
-  updatePageNumbers();
+  if (showingFromElement) showingFromElement.textContent = orders.length > 0 ? 1 : 0;
+  if (showingToElement) showingToElement.textContent = orders.length;
 }
 
 function updatePageNumbers() {
@@ -2562,25 +2563,7 @@ function updatePageNumbers() {
 }
 
 function goToPage(page) {
-  if (typeof page === 'number') {
-    currentPage = page;
-  } else {
-    switch(page) {
-      case 'first':
-        currentPage = 1;
-        break;
-      case 'prev':
-        currentPage = Math.max(1, currentPage - 1);
-        break;
-      case 'next':
-        currentPage = Math.min(totalPages, currentPage + 1);
-        break;
-      case 'last':
-        currentPage = totalPages;
-        break;
-    }
-  }
-  
+  currentPage = 1;
   updateOrderTable();
 }
 
@@ -2589,12 +2572,11 @@ function selectAllOrders(checked) {
   const activeBatch = orderBatches.find(b => b.isActive);
   if (!activeBatch) return;
   
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, activeBatch.orders.length);
-  
-  for (let i = startIndex; i < endIndex; i++) {
-    activeBatch.orders[i].selected = checked;
-  }
+  activeBatch.orders.forEach(order => {
+    if (order.status !== 'counting' && order.status !== 'completed') {
+      order.selected = checked;
+    }
+  });
   // Gửi ngay trạng thái chọn/bỏ chọn sang ESP32
   
   saveOrderBatches();
@@ -2677,9 +2659,8 @@ function updateOrderTable() {
   const orders = activeBatch.orders;
   updatePagination(orders);
   
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, orders.length);
-  const pageOrders = orders.slice(startIndex, endIndex);
+  const startIndex = 0;
+  const pageOrders = orders;
   
   let selectedCount = 0;
   
@@ -2756,8 +2737,9 @@ function updateOrderTable() {
   // Update select all checkbox
   const selectAllCheckbox = document.getElementById('selectAllCheckbox');
   if (selectAllCheckbox) {
-    const allPageSelected = pageOrders.length > 0 && pageOrders.every(order => order.selected);
-    const somePageSelected = pageOrders.some(order => order.selected);
+    const selectableOrders = orders.filter(order => order.status !== 'counting' && order.status !== 'completed');
+    const allPageSelected = selectableOrders.length > 0 && selectableOrders.every(order => order.selected);
+    const somePageSelected = selectableOrders.some(order => order.selected);
     
     selectAllCheckbox.checked = allPageSelected;
     selectAllCheckbox.indeterminate = somePageSelected && !allPageSelected;
@@ -6008,6 +5990,7 @@ function updateDisplayOnly(data) {
 // Hàm cập nhật các elements hiển thị (KHÔNG BAO GỒM executeCount)
 function updateDisplayElements(data) {
   // REMOVE executeCount update từ đây - sử dụng updateExecuteCountDisplay thay thế
+  updateHeaderOnlineTime(data.uptime);
   
   const startTimeElement = document.getElementById('startTime');
   if (startTimeElement && data.startTime) {
@@ -6989,11 +6972,33 @@ const ADMIN_PASSWORD = "kinhbac99"; // Password for product management
 const SETTINGS_PASSWORD = "kb666888"; // Password for WiFi and settings
 let authenticatedTabs = new Set();
 
+function setMainMenuOpen(open) {
+  const menu = document.getElementById('mainTabMenu');
+  const toggle = document.querySelector('.menu-toggle');
+  if (!menu || !toggle) return;
+
+  menu.classList.toggle('open', open);
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function toggleMainMenu() {
+  const menu = document.getElementById('mainTabMenu');
+  setMainMenuOpen(!menu?.classList.contains('open'));
+}
+
+document.addEventListener('click', function(event) {
+  const navMenu = document.querySelector('.nav-menu');
+  if (navMenu && !navMenu.contains(event.target)) {
+    setMainMenuOpen(false);
+  }
+});
+
 function showTab(tabName) {
   // Check if tab requires authentication
   const protectedTabs = ['product', 'wifi', 'settings'];
   
   if (protectedTabs.includes(tabName) && !authenticatedTabs.has(tabName)) {
+    setMainMenuOpen(false);
     showPasswordModal(tabName);
     return;
   }
@@ -7070,18 +7075,18 @@ function showTabInternal(tabName) {
   document.getElementById(tabName).classList.add('active');
   
   // Show selected tab button
-  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+  const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+  activeButton.classList.add('active');
+  const activeMenuLabel = document.getElementById('activeMenuLabel');
+  if (activeMenuLabel) {
+    activeMenuLabel.textContent = activeButton.textContent.trim();
+  }
+  setMainMenuOpen(false);
   
   // Load data based on tab
   switch(tabName) {
     case 'overview':
       updateOverview();
-      setTimeout(() => {
-        const orderList = document.querySelector('#overview .order-list-section');
-        if (orderList) {
-          orderList.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 80);
       break;
     case 'history':
       // Refresh history UI whenever user opens the History tab
