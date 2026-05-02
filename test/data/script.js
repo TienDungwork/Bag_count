@@ -3139,9 +3139,32 @@ async function pauseCounting() {
   
   // CẬP NHẬT UI NGAY LẬP TỨC
   updateUIForPause();
-  countingState.isActive = false;
   
   try {
+    const statusBeforePause = await getStatus();
+    const deviceCountBeforePause = Number(statusBeforePause?.count || 0);
+    const deviceTypeBeforePause = statusBeforePause?.type || statusBeforePause?.currentType || '';
+    const deviceCodeBeforePause = statusBeforePause?.productCode || '';
+
+    const activeBatch = orderBatches.find(b => b.isActive);
+    if (activeBatch && deviceCountBeforePause > 0) {
+      const countingOrder = activeBatch.orders.find(order => {
+        if (!order.selected || order.status !== 'counting') return false;
+        const orderProductName = order.product?.name || order.productName || '';
+        const orderProductCode = order.product?.code || order.productCode || '';
+        return (deviceCodeBeforePause && orderProductCode && deviceCodeBeforePause === orderProductCode) ||
+               (deviceTypeBeforePause && (deviceTypeBeforePause === orderProductName || deviceTypeBeforePause === orderProductCode)) ||
+               (!deviceTypeBeforePause && !deviceCodeBeforePause);
+      });
+
+      if (countingOrder) {
+        const safePauseCount = Math.max(getOrderSavedCount(countingOrder), deviceCountBeforePause);
+        countingOrder.currentCount = safePauseCount;
+        countingOrder.executeCount = safePauseCount;
+        updateExecuteCountDisplay(safePauseCount, 'pause-before-command');
+      }
+    }
+
     // Try MQTT first for real-time commands
     if (realtimeConnected && pauseCountingMQTT()) {
       console.log('PAUSE command sent via MQTT');
@@ -3156,11 +3179,13 @@ async function pauseCounting() {
     
     // � MANUAL UPDATE ORDERS TRƯỚC KHI REFRESH
     console.log('Manually updating order status to paused...');
-    const activeBatch = orderBatches.find(b => b.isActive);
     if (activeBatch) {
       const countingOrder = activeBatch.orders.find(order => order.status === 'counting' && order.selected);
       if (countingOrder) {
-        countingOrder.currentCount = getOrderSavedCount(countingOrder);
+        const savedCount = getOrderSavedCount(countingOrder);
+        const safePauseCount = Math.max(savedCount, deviceCountBeforePause);
+        countingOrder.currentCount = safePauseCount;
+        countingOrder.executeCount = safePauseCount;
       }
 
       let pausedCount = 0;
@@ -3173,10 +3198,7 @@ async function pauseCounting() {
       });
       console.log(`${pausedCount} orders changed to paused status`);
       
-      // Force save to ESP32
-      console.log('Force saving paused orders to ESP32...');
-      await sendSelectedOrdersToESP32(activeBatch);
-      await sendOrderBatchesToESP32();
+      saveOrderBatches();
       updateOrderTable();
     }
     
@@ -7054,6 +7076,12 @@ function showTabInternal(tabName) {
   switch(tabName) {
     case 'overview':
       updateOverview();
+      setTimeout(() => {
+        const orderList = document.querySelector('#overview .order-list-section');
+        if (orderList) {
+          orderList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 80);
       break;
     case 'history':
       // Refresh history UI whenever user opens the History tab

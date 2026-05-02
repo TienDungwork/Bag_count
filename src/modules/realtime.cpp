@@ -72,8 +72,14 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         }
         targetCount = target;
         
-        // Reset trạng thái cho đơn hàng mới (hoặc resume từ web)
-        totalCount = keepCount ? currentCountFromWeb : 0;
+        // Reset trạng thái cho đơn mới; khi resume thì không để count web cũ = 0 ghi đè count thật trên ESP32.
+        if (keepCount) {
+          if (currentCountFromWeb > 0) {
+            totalCount = currentCountFromWeb;
+          }
+        } else {
+          totalCount = 0;
+        }
         isRunning = false;
         isTriggerEnabled = false;
         isCountingEnabled = false;
@@ -129,8 +135,15 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
             if (isMatch) {
               order["selected"] = true;
               order["status"] = keepCount ? "paused" : "waiting";
-              order["currentCount"] = keepCount ? currentCountFromWeb : 0;
-              order["executeCount"] = keepCount ? currentCountFromWeb : 0;
+              if (keepCount) {
+                if (currentCountFromWeb > 0) {
+                  order["currentCount"] = currentCountFromWeb;
+                  order["executeCount"] = currentCountFromWeb;
+                }
+              } else {
+                order["currentCount"] = 0;
+                order["executeCount"] = 0;
+              }
             }
           }
         }
