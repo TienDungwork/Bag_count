@@ -164,12 +164,10 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
       bool settingsChanged = false;
       
       if (doc.containsKey("brightness")) {
-        displayBrightness = doc["brightness"];
-        if (displayBrightness >= 10 && displayBrightness <= 100) {
-          dma_display->setBrightness8(map(displayBrightness, 0, 100, 0, 255));
-          Serial.println("MQTT: Applied brightness: " + String(displayBrightness) + "%");
-          settingsChanged = true;
-        }
+        displayBrightness = 100;
+        if (dma_display) dma_display->setBrightness8(255);
+        Serial.println("MQTT: Brightness fixed at 100%");
+        settingsChanged = true;
       }
       
       if (doc.containsKey("sensorDelay")) {
@@ -226,7 +224,7 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         DynamicJsonDocument settingsDoc(1024);
         settingsDoc["conveyorName"] = conveyorName;
         settingsDoc["location"] = location;
-        settingsDoc["brightness"] = displayBrightness;
+        settingsDoc["brightness"] = 100;
         settingsDoc["sensorDelay"] = sensorDelayMs;
         settingsDoc["bagDetectionDelay"] = ::bagDetectionDelay;
         settingsDoc["minBagInterval"] = ::minBagInterval;

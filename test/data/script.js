@@ -143,16 +143,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     startManagementAPIPolling();
   }, 3000);
   
-  // Setup brightness slider
-  const brightnessSlider = document.getElementById('brightness');
-  const brightnessValue = document.getElementById('brightnessValue');
-  if (brightnessSlider && brightnessValue) {
-    brightnessSlider.addEventListener('input', function() {
-      brightnessValue.textContent = this.value + '%';
-      settings.brightness = parseInt(this.value);
-    });
-  }
-  
   // Khởi tạo trạng thái ban đầu cho các nút bấm
   initializeButtonStates();
   
@@ -4172,7 +4162,7 @@ async function loadSettingsFromESP32() {
       if (esp32Settings.ipAddress !== undefined) settings.ipAddress = esp32Settings.ipAddress;
       if (esp32Settings.gateway !== undefined) settings.gateway = esp32Settings.gateway;
       if (esp32Settings.subnet !== undefined) settings.subnet = esp32Settings.subnet;
-      if (esp32Settings.brightness !== undefined) settings.brightness = esp32Settings.brightness;
+      settings.brightness = 100;
       if (esp32Settings.sensorDelay !== undefined) settings.sensorDelay = esp32Settings.sensorDelay;
       if (esp32Settings.bagTimeMultiplier !== undefined) settings.bagTimeMultiplier = esp32Settings.bagTimeMultiplier;
       if (esp32Settings.minBagInterval !== undefined) settings.minBagInterval = esp32Settings.minBagInterval;
@@ -4220,8 +4210,6 @@ function updateSettingsForm() {
   const bagTimeMultiplierEl = document.getElementById('bagTimeMultiplier');
   const minBagIntervalEl = document.getElementById('minBagInterval');
   const autoResetEl = document.getElementById('autoReset');
-  const brightnessEl = document.getElementById('brightness');
-  const brightnessValueEl = document.getElementById('brightnessValue');
   const relayDelayEl = document.getElementById('relayDelay');
   
   if (conveyorNameEl) conveyorNameEl.value = settings.conveyorName || 'BT-001';
@@ -4233,8 +4221,7 @@ function updateSettingsForm() {
   if (bagTimeMultiplierEl) bagTimeMultiplierEl.value = settings.bagTimeMultiplier || 25;
   if (minBagIntervalEl) minBagIntervalEl.value = settings.minBagInterval || 100;
   if (autoResetEl) autoResetEl.checked = settings.autoReset || false;
-  if (brightnessEl) brightnessEl.value = settings.brightness || 100;
-  if (brightnessValueEl) brightnessValueEl.textContent = (settings.brightness || 100) + '%';
+  settings.brightness = 100;
   if (relayDelayEl) relayDelayEl.value = (settings.relayDelayAfterComplete || 5000) / 1000; // Convert ms to seconds
   
   // MQTT2 settings (Server báo cáo)
@@ -5138,7 +5125,7 @@ function saveGeneralSettings() {
   settings.bagTimeMultiplier = parseInt(document.getElementById('bagTimeMultiplier').value);
   settings.minBagInterval = parseInt(document.getElementById('minBagInterval').value);
   settings.autoReset = document.getElementById('autoReset').checked;
-  settings.brightness = parseInt(document.getElementById('brightness').value);
+  settings.brightness = 100;
   settings.relayDelayAfterComplete = parseInt(document.getElementById('relayDelay').value) * 1000; // Convert seconds to ms
   console.log('Saving settings to ESP32:', settings);
   
@@ -5167,7 +5154,7 @@ function sendSettingsViaMQTT() {
     try {
       const mqttSettings = {
         conveyorName: settings.conveyorName,
-        brightness: settings.brightness,
+        brightness: 100,
         sensorDelay: settings.sensorDelay,
         bagDetectionDelay: settings.bagDetectionDelay,
         bagTimeMultiplier: settings.bagTimeMultiplier,
@@ -5576,7 +5563,7 @@ function saveSettings() {
   settings.bagTimeMultiplier = parseInt(document.getElementById('bagTimeMultiplier').value);
   settings.minBagInterval = parseInt(document.getElementById('minBagInterval').value);
   settings.autoReset = document.getElementById('autoReset').checked;
-  settings.brightness = parseInt(document.getElementById('brightness').value);
+  settings.brightness = 100;
   settings.relayDelayAfterComplete = parseInt(document.getElementById('relayDelay').value) * 1000; // Convert seconds to ms
   
   // MQTT2 settings (Server báo cáo)
@@ -5596,11 +5583,6 @@ function saveSettings() {
   // VALIDATE SETTINGS
   if (!settings.conveyorName || settings.conveyorName.trim() === '') {
     showNotification('Tên băng tải không được để trống', 'error');
-    return;
-  }
-  
-  if (settings.brightness < 10 || settings.brightness > 100) {
-    showNotification('Độ sáng phải từ 10% đến 100%', 'error');
     return;
   }
   
@@ -5805,7 +5787,7 @@ function sendSettingsToESP32() {
   const data = {
     conveyorName: settings.conveyorName,
     location: settings.location,
-    brightness: settings.brightness,
+    brightness: 100,
     sensorDelay: settings.sensorDelay,
     minBagInterval: settings.minBagInterval,
     autoReset: settings.autoReset,

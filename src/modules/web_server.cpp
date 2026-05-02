@@ -1524,7 +1524,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["bagDetectionDelay"] = bagDetectionDelay;
     doc["minBagInterval"] = minBagInterval;
     doc["autoReset"] = autoReset;
-    doc["brightness"] = displayBrightness;
+    doc["brightness"] = 100;
     doc["relayDelayAfterComplete"] = relayDelayAfterComplete;
     doc["bagTimeMultiplier"] = bagTimeMultiplier;
     
@@ -1588,11 +1588,9 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       
       if (doc.containsKey("brightness")) {
         int oldValue = displayBrightness;
-        displayBrightness = doc["brightness"];
-        if (displayBrightness >= 10 && displayBrightness <= 100) {
-          dma_display->setBrightness8(map(displayBrightness, 0, 100, 0, 255));
-          Serial.println("  brightness: " + String(oldValue) + "% → " + String(displayBrightness) + "%");
-        }
+        displayBrightness = 100;
+        if (dma_display) dma_display->setBrightness8(255);
+        Serial.println("  brightness fixed: " + String(oldValue) + "% → 100%");
       }
       
       if (doc.containsKey("sensorDelay")) {
@@ -2258,7 +2256,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     // Current settings
     doc["current_settings"]["conveyor_name"] = conveyorName;
-    doc["current_settings"]["brightness"] = displayBrightness;
+    doc["current_settings"]["brightness"] = 100;
     doc["current_settings"]["sensor_delay"] = sensorDelayMs;
     doc["current_settings"]["bag_detection_delay"] = bagDetectionDelay;
     doc["current_settings"]["min_bag_interval"] = minBagInterval;
@@ -2353,7 +2351,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     }
     
     doc["current_memory"]["conveyorName"] = conveyorName;
-    doc["current_memory"]["brightness"] = displayBrightness;
+    doc["current_memory"]["brightness"] = 100;
     doc["current_memory"]["sensorDelay"] = sensorDelayMs;
     doc["current_memory"]["bagDetectionDelay"] = bagDetectionDelay;
     doc["current_memory"]["minBagInterval"] = minBagInterval;
@@ -2861,7 +2859,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     // Reset biến global về default
     conveyorName = "BT-001";
-    displayBrightness = 35;
+    displayBrightness = 100;
     sensorDelayMs = 0;
     bagDetectionDelay = 200;
     minBagInterval = 100;
@@ -2889,7 +2887,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     // Current variables in memory
     doc["memory"]["conveyorName"] = conveyorName;
-    doc["memory"]["brightness"] = displayBrightness;
+    doc["memory"]["brightness"] = 100;
     doc["memory"]["sensorDelay"] = sensorDelayMs;
     doc["memory"]["bagDetectionDelay"] = bagDetectionDelay;
     doc["memory"]["minBagInterval"] = minBagInterval;
@@ -2943,9 +2941,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     loadSettingsFromFile();
     
     // Áp dụng ngay các thay đổi
-    if (dma_display && displayBrightness >= 10 && displayBrightness <= 100) {
-      dma_display->setBrightness8(map(displayBrightness, 0, 100, 0, 255));
-      Serial.println("Display brightness re-applied: " + String(displayBrightness) + "%");
+    if (dma_display) {
+      displayBrightness = 100;
+      dma_display->setBrightness8(255);
+      Serial.println("Display brightness re-applied: 100%");
     }
     
     debounceDelay = sensorDelayMs;
@@ -3182,4 +3181,3 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
   Serial.println("Test page at: http://192.168.4.1/test");
   Serial.println("Test Customer API at: http://192.168.4.1/test-customer-api");
 }
-

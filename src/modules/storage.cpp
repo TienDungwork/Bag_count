@@ -179,7 +179,7 @@ void saveSettingsToFile() {
   // System settings
   doc["conveyorName"] = conveyorName;
   doc["location"] = location;
-  doc["brightness"] = displayBrightness;
+  doc["brightness"] = 100;
   doc["sensorDelay"] = sensorDelayMs;
   doc["bagDetectionDelay"] = bagDetectionDelay;
   doc["minBagInterval"] = minBagInterval;
@@ -255,7 +255,7 @@ void loadSettingsFromFile() {
       // Load all settings from file
       conveyorName = doc["conveyorName"].as<String>();
       location = doc["location"].as<String>();
-      displayBrightness = doc["brightness"].as<int>();
+      displayBrightness = 100;
       sensorDelayMs = doc["sensorDelay"].as<int>();
       bagDetectionDelay = doc["bagDetectionDelay"].as<int>();
       minBagInterval = doc["minBagInterval"].as<int>();

@@ -135,17 +135,9 @@ void setup() {
   // Delay để đảm bảo hardware stable
   delay(100);
   
-  // Áp dụng brightness từ settings (không giới hạn quá thấp)
-  if (displayBrightness >= 10 && displayBrightness <= 100) {
-    // Sử dụng brightness từ settings, không giới hạn thấp quá
-    int adjustedBrightness = displayBrightness; // Dùng brightness gốc 35%
-    dma_display->setBrightness8(map(adjustedBrightness, 0, 100, 0, 255));
-    Serial.println("Display brightness applied: " + String(adjustedBrightness) + "% (from settings)");
-  } else {
-    Serial.println("Invalid brightness value, using 35%");
-    displayBrightness = 35;
-    dma_display->setBrightness8(map(35, 0, 100, 0, 255));
-  }
+  displayBrightness = 100;
+  dma_display->setBrightness8(255);
+  Serial.println("Display brightness fixed at 100%");
   
   // Khởi tạo colors cho display
   myBLACK = dma_display->color565(0, 0, 0);
