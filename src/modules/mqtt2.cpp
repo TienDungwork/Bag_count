@@ -200,6 +200,7 @@ void sendRealtimeSnapshot(AsyncWebSocketClient *client) {
   }
 
   publishStatusMQTT();
+  publishCountUpdate();
   publishSensorData();
   publishHeartbeat();
 }
@@ -267,4 +268,3 @@ void setupRealtimeServer() {
   realtimeServer.addHandler(&realtimeSocket);
   realtimeServer.begin();
 }
-

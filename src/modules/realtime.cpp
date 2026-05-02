@@ -286,6 +286,7 @@ void publishStatusMQTT() {
   doc["count"] = totalCount;
   doc["target"] = targetCount;
   doc["type"] = bagType;
+  doc["productCode"] = productCode;
   doc["startTime"] = startTimeStr;
   doc["timestamp"] = getTimeStr();
   doc["uptime"] = millis() / 1000;
@@ -464,4 +465,3 @@ void publishBagConfigs() {
   broadcastRealtimeMessage("bagcounter/orders", message);
   Serial.println("Orders configuration published to realtime web clients");
 }
-

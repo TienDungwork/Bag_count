@@ -437,10 +437,16 @@ void loop() {
               // Bắt đầu phát hiện bao mới
               isBagDetected = true;
               bagStartTime = currentTime;
+              sensorClearStartTime = 0;
+              isWaitingForBagGroupEnd = false;
               int dynamicDelay = calculateDynamicBagDetectionDelay();
               Serial.print("BẮT ĐẦU phát hiện bao - thời gian xác nhận: ");
               Serial.print(dynamicDelay);
               Serial.println("ms");
+            } else if (isWaitingForBagGroupEnd) {
+              isWaitingForBagGroupEnd = false;
+              sensorClearStartTime = 0;
+              Serial.println("Sensor che lại trong khoảng gom nhóm - nối tiếp cùng nhóm bao");
             }
             
           } else {
@@ -452,48 +458,59 @@ void loop() {
           }
           
         } else {
-          // Sensor đã nhả về CLEAR: kết thúc một lần bao che cảm biến
-          if (isBagDetected) {
-            unsigned long detectionDuration = millis() - bagStartTime;
-            
-            // Kiểm tra thời gian xác nhận đủ lâu (dynamic bagDetectionDelay từ weight-based settings)
-            int dynamicDelay = calculateDynamicBagDetectionDelay();
-            if (detectionDuration >= dynamicDelay) {
-              // XÁC NHẬN BAO HỢP LỆ - ĐẾM!
-              int bagCount = calculateBagCountFromDuration(detectionDuration);
-              Serial.print("XÁC NHẬN BAO! Thời gian phát hiện: ");
-              Serial.print(detectionDuration);
-              Serial.print("ms >= ");
-              Serial.print(dynamicDelay);
-              Serial.print("ms. Phát hiện ");
-              Serial.print(bagCount);
-              Serial.print(" bao. Count: ");
-              Serial.print(totalCount);
-              Serial.print(" -> ");
-              Serial.println(totalCount + bagCount);
-              
-              updateCount(bagCount);
-              needUpdate = true;
-              lastBagTime = millis();
-              
-              // MQTT: Publish sensor data khi đếm thành công
-              publishSensorData();
-              
-            } else {
-              Serial.print("BAO KHÔNG HỢP LỆ - thời gian quá ngắn: ");
-              Serial.print(detectionDuration);
-              Serial.print("ms < ");
-              Serial.print(dynamicDelay);
-              Serial.println("ms");
-            }
-            
-            isBagDetected = false;
+          // Sensor đã nhả về CLEAR: chờ thêm một khoảng ngắn để gom các bao sát nhau.
+          if (isBagDetected && !isWaitingForBagGroupEnd) {
+            sensorClearStartTime = millis();
+            isWaitingForBagGroupEnd = true;
+            Serial.print("Sensor nhả - chờ gom nhóm ");
+            Serial.print(bagGroupGapToleranceMs());
+            Serial.println("ms trước khi chốt số bao");
           }
         }
       }
 
-      // Chỉ xác nhận đếm khi sensor đã nhả về HIGH. Không cộng lặp khi sensor giữ LOW
-      // để tránh đếm ảo nếu cảm biến bị che, kẹt tín hiệu hoặc nhiễu.
+      if (isBagDetected && isWaitingForBagGroupEnd && !isSensorBlocked(sensorState) &&
+          (millis() - sensorClearStartTime >= bagGroupGapToleranceMs())) {
+        unsigned long detectionDuration = sensorClearStartTime - bagStartTime;
+
+        // Kiểm tra thời gian xác nhận đủ lâu (dynamic bagDetectionDelay từ weight-based settings)
+        int dynamicDelay = calculateDynamicBagDetectionDelay();
+        if (detectionDuration >= dynamicDelay) {
+          // XÁC NHẬN BAO HỢP LỆ - ĐẾM!
+          int bagCount = calculateBagCountFromDuration(detectionDuration);
+          Serial.print("XÁC NHẬN NHÓM BAO! Thời gian phát hiện: ");
+          Serial.print(detectionDuration);
+          Serial.print("ms >= ");
+          Serial.print(dynamicDelay);
+          Serial.print("ms. Phát hiện ");
+          Serial.print(bagCount);
+          Serial.print(" bao. Count: ");
+          Serial.print(totalCount);
+          Serial.print(" -> ");
+          Serial.println(totalCount + bagCount);
+
+          updateCount(bagCount);
+          needUpdate = true;
+          lastBagTime = millis();
+
+          // MQTT: Publish sensor data khi đếm thành công
+          publishSensorData();
+
+        } else {
+          Serial.print("BAO KHÔNG HỢP LỆ - thời gian quá ngắn: ");
+          Serial.print(detectionDuration);
+          Serial.print("ms < ");
+          Serial.print(dynamicDelay);
+          Serial.println("ms");
+        }
+
+        isBagDetected = false;
+        isWaitingForBagGroupEnd = false;
+        sensorClearStartTime = 0;
+      }
+
+      // Chỉ xác nhận đếm sau khi sensor đã nhả về HIGH và hết cửa sổ gom nhóm.
+      // Điều này tránh đếm ảo khi sensor giữ LOW, đồng thời không mất các bao sát nhau có khe hở ngắn.
     }
     lastSensorState = reading;
     

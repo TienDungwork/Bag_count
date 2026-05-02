@@ -1,5 +1,11 @@
 #include "counter.h"
 
+unsigned long bagGroupGapToleranceMs() {
+  const unsigned long minimumGapMs = 500;
+  unsigned long debounceGapMs = (unsigned long)sensorDelayMs * 2;
+  return std::max(minimumGapMs, debounceGapMs);
+}
+
 //----------------------------------------Dynamic Bag Detection Delay Calculation
 int calculateDynamicBagDetectionDelay() {
   // BẮT BUỘC PHẢI CÓ WEIGHT-BASED RULES
@@ -223,32 +229,23 @@ int calculateBagCountFromDuration(unsigned long detectionDuration) {
     baseTime = 2000; // Emergency fallback
   }
   
+  if (baseTime <= 0) {
+    return 1;
+  }
+
   int lowerPercent = 100 - bagTimeMultiplier; // Ví dụ: 100-25=75%
   
-  // Tính ngưỡng thời gian cho từng số bao
+  // Ngưỡng tối thiểu để loại nhiễu rất ngắn.
   int min1Bag = (baseTime * 1 * lowerPercent) / 100;  // 75% thời gian 1 bao
-  int max1Bag = baseTime * 1;                         // 100% thời gian 1 bao
-  
-  int min2Bag = (baseTime * 2 * lowerPercent) / 100;  // 75% thời gian 2 bao  
-  int max2Bag = baseTime * 2;                         // 100% thời gian 2 bao
-  
-  int min3Bag = (baseTime * 3 * lowerPercent) / 100;  // 75% thời gian 3 bao
-  int max3Bag = baseTime * 3;                         // 100% thời gian 3 bao
-  
-  int min5Bag = (baseTime * 5 * lowerPercent) / 100;  // 75% thời gian 5 bao
-  
-  // Xác định số bao dựa trên thời gian phát hiện
-  if (detectionDuration >= min1Bag && detectionDuration <= max1Bag) {
-    return 1; // 1 bao
-  } else if (detectionDuration >= min2Bag && detectionDuration <= max2Bag) {
-    return 2; // 2 bao
-  } else if (detectionDuration >= min3Bag && detectionDuration <= max3Bag) {
-    return 3; // 3 bao
-  } else if (detectionDuration >= min5Bag) {
-    return 5; // 5 bao hoặc nhiều hơn
-  } else {
+
+  if (detectionDuration < min1Bag) {
     return 1; // Fallback: nếu thời gian quá ngắn, coi như 1 bao
   }
+
+  // Làm tròn theo thời gian chuẩn mỗi bao để không có khoảng chết.
+  // Ví dụ base 1900ms, duration 6000ms => 3.16 bao => làm tròn thành 3.
+  int bagCount = (detectionDuration + (baseTime / 2)) / baseTime;
+  return std::max(1, bagCount);
 }
 
 void updateCount() {
@@ -922,4 +919,3 @@ void updateStartLED() {
     Serial.println("RELAY STATE CHANGED: " + String(startLedOn ? "ON (HIGH)" : "OFF (LOW)") + " - Reason: " + reason);
   }
 }
-

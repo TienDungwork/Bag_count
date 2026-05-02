@@ -194,6 +194,8 @@ struct CounterState {
   unsigned long bagStartTime = 0;
   bool isBagDetected = false;
   bool waitingForInterval = false;
+  unsigned long sensorClearStartTime = 0;
+  bool isWaitingForBagGroupEnd = false;
   unsigned long sensorActiveStartTime = 0;
   unsigned long lastMeasuredTime = 0;
   bool isMeasuringSensor = false;
@@ -346,6 +348,8 @@ static auto& lastBagTime = app.counter.lastBagTime;
 static auto& bagStartTime = app.counter.bagStartTime;
 static auto& isBagDetected = app.counter.isBagDetected;
 static auto& waitingForInterval = app.counter.waitingForInterval;
+static auto& sensorClearStartTime = app.counter.sensorClearStartTime;
+static auto& isWaitingForBagGroupEnd = app.counter.isWaitingForBagGroupEnd;
 static auto& sensorActiveStartTime = app.counter.sensorActiveStartTime;
 static auto& lastMeasuredTime = app.counter.lastMeasuredTime;
 static auto& isMeasuringSensor = app.counter.isMeasuringSensor;
@@ -491,6 +495,7 @@ void setSystemConnected();
 
 int calculateDynamicBagDetectionDelay();
 int calculateBagCountFromDuration(unsigned long detectionDuration);
+unsigned long bagGroupGapToleranceMs();
 void updateCount();
 void updateCount(int bagCount);
 void updateDoneLED();

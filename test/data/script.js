@@ -943,29 +943,30 @@ async function updateDeviceStatus(data) {
     // console.log('ESP32 Status:', data.status, 'Web state:', countingState.isActive, 'Timestamp:', new Date().toLocaleTimeString());
     
     if (data.status === 'RUNNING' && !countingState.isActive) {
-      // console.log('IR Remote START detected - updating web state');
+      // Thiết bị đang chạy rồi; khi web vừa wake/reconnect chỉ sync UI từ ESP32.
+      // Không gửi lại selected orders/current order xuống ESP32 vì count local có thể cũ hoặc đang là 0.
       countingState.isActive = true;
       
-      // Find active batch and set a counting order if none
       const activeBatch = orderBatches.find(b => b.isActive);
       if (activeBatch) {
         const selectedOrders = activeBatch.orders.filter(o => o.selected);
         if (selectedOrders.length > 0) {
-          // Ưu tiên đơn đang chờ (waiting); chỉ resume paused nếu không còn waiting
+          const incomingType = data.type || data.currentType || '';
+          const incomingCode = data.productCode || '';
           const orderToStart =
-            selectedOrders.find(o => o.status === 'waiting') ||
-            selectedOrders.find(o => o.status === 'paused');
+            selectedOrders.find(o => {
+              const orderProductName = o.product?.name || o.productName || '';
+              const orderProductCode = o.product?.code || o.productCode || '';
+              return (incomingCode && orderProductCode && incomingCode === orderProductCode) ||
+                     (incomingType && (incomingType === orderProductName || incomingType === orderProductCode));
+            }) ||
+            selectedOrders.find(o => o.status === 'counting') ||
+            selectedOrders.find(o => o.status === 'paused') ||
+            selectedOrders.find(o => o.status === 'waiting');
           if (orderToStart) {
             orderToStart.status = 'counting';
             countingState.currentOrderIndex = selectedOrders.indexOf(orderToStart);
             console.log('Set order to counting:', countingState.currentOrderIndex + 1);
-            
-            // GỬI DANH SÁCH ĐƠN ĐƯỢC CHỌN KHI IR REMOTE START
-            console.log('IR Remote START - Sending selected orders to ESP32...');
-            await sendSelectedOrdersToESP32(activeBatch);
-            
-            console.log('Force saving counting orders to ESP32...');
-            await sendOrderBatchesToESP32(); // FORCE SYNC với ESP32
             updateOrderTable();
           }
         }
@@ -4658,9 +4659,9 @@ async function syncAllProductsToESP32() {
 
 async function getStatus() {
   try {
-    const response = await fetch(`http://${settings.ipAddress}/status`, {
+    const response = await fetch('/api/status', {
       method: 'GET',
-      timeout: 3000
+      cache: 'no-store'
     });
     
     if (!response.ok) {
@@ -4675,6 +4676,31 @@ async function getStatus() {
     return null;
   }
 }
+
+async function refreshStatusFromDevice(source = 'manual') {
+  const data = await getStatus();
+  if (!data) return;
+
+  lastMqttUpdate = Date.now();
+  lastHeartbeat = Date.now();
+  deviceConnected = true;
+  updateDeviceConnectionStatus(true);
+
+  console.log(`Status refreshed from ESP32 (${source}):`, data);
+}
+
+window.addEventListener('focus', () => {
+  refreshStatusFromDevice('window-focus');
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    if (!realtimeWs || realtimeWs.readyState === WebSocket.CLOSED || realtimeWs.readyState === WebSocket.CLOSING) {
+      initMQTTClient();
+    }
+    refreshStatusFromDevice('visibilitychange');
+  }
+});
 
 async function updateStatusFromDevice(data) {
   if (!data) return;
