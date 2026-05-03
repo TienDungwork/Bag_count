@@ -5314,21 +5314,27 @@ window.resetCounting = resetCounting;
 // Removed old showTab function - using new one with authentication
 
 // Mode Management
-function setMode(mode) {
+function applyModeToUI(mode) {
+  if (mode !== 'input' && mode !== 'output') return;
+
   currentMode = mode;
-  
-  // Update button states
+
   const inputBtn = document.querySelector('.input-btn');
   const outputBtn = document.querySelector('.output-btn');
-  
+  if (!inputBtn || !outputBtn) return;
+
   inputBtn.classList.remove('active');
   outputBtn.classList.remove('active');
-  
+
   if (mode === 'input') {
     inputBtn.classList.add('active');
   } else {
     outputBtn.classList.add('active');
   }
+}
+
+function setMode(mode) {
+  applyModeToUI(mode);
   
   // GỬI LỆNH ĐẾN ESP32 ĐỂ CẬP NHẬT HIỂN THỊ LED
   sendESP32Command('set_mode', {
@@ -6023,6 +6029,12 @@ function updateDisplayOnly(data) {
 function updateDisplayElements(data) {
   // REMOVE executeCount update từ đây - sử dụng updateExecuteCountDisplay thay thế
   updateHeaderOnlineTime(data.uptime);
+
+  const modeFromDevice = data.setMode || data.currentMode;
+  if (modeFromDevice && modeFromDevice !== currentMode) {
+    console.log('Mode update from ESP32:', currentMode, '→', modeFromDevice);
+    applyModeToUI(modeFromDevice);
+  }
   
   const startTimeElement = document.getElementById('startTime');
   if (startTimeElement && data.startTime) {

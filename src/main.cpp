@@ -76,6 +76,7 @@ void setup() {
   // BƯỚC 3: Khởi tạo hardware
   pinMode(SENSOR_PIN, INPUT_PULLUP);
   pinMode(TRIGGER_SENSOR_PIN, INPUT);
+  pinMode(OUTPUT_TRIGGER_SENSOR_PIN, INPUT);
   pinMode(START_LED_PIN, OUTPUT);
   pinMode(DONE_LED_PIN, OUTPUT);
   pinMode(BUTTON_PIN3, INPUT_PULLUP);
@@ -83,6 +84,10 @@ void setup() {
   lastTimingSensorState = digitalRead(SENSOR_PIN);
   sensorState = lastTimingSensorState;
   lastSensorState = lastTimingSensorState;
+  triggerState = digitalRead(TRIGGER_SENSOR_PIN);
+  lastTriggerState = triggerState;
+  outputTriggerState = digitalRead(OUTPUT_TRIGGER_SENSOR_PIN);
+  lastOutputTriggerState = outputTriggerState;
   if (isSensorBlocked(lastTimingSensorState)) {
     sensorActiveStartTime = millis();
     isMeasuringSensor = true;
@@ -353,38 +358,71 @@ void loop() {
   // luôn nhận được thời gian bao đi qua cảm biến.
   updateSensorTimingMeasurement();
 
-  // Chỉ xử lý cảm biến khởi động khi được kích hoạt
+  // Chỉ xử lý cảm biến khởi động khi được kích hoạt.
+  // GPIO4 là input trigger, GPIO39 là output trigger.
   if (isTriggerEnabled) {
-    int triggerReading = digitalRead(TRIGGER_SENSOR_PIN);
+    int inputTriggerReading = digitalRead(TRIGGER_SENSOR_PIN);
+    int outputTriggerReading = digitalRead(OUTPUT_TRIGGER_SENSOR_PIN);
     
-    if (triggerReading != lastTriggerState) {
-      lastDebounceTime = millis();
+    if (inputTriggerReading != lastTriggerState) {
+      inputTriggerDebounceTime = millis();
     }
     
-    if ((millis() - lastDebounceTime) > debounceDelay) {
-      if (triggerReading != triggerState) {
-        triggerState = triggerReading;
+    if ((millis() - inputTriggerDebounceTime) > debounceDelay) {
+      if (inputTriggerReading != triggerState ||
+          (isInputTriggerBlocked(inputTriggerReading) && (!isCountingEnabled || currentMode != "input"))) {
+        triggerState = inputTriggerReading;
 
-        if (inputSensorActiveLevel != outputSensorActiveLevel) {
-          String detectedMode = triggerState == inputSensorActiveLevel ? "input" : "output";
-          if (currentMode != detectedMode) {
-            currentMode = detectedMode;
+        if (isInputTriggerBlocked(triggerState)) {  // Khi phát hiện vật thể ở chiều nhập
+          if (currentMode != "input") {
+            currentMode = "input";
             needUpdate = true;
-            Serial.println("TRIGGER SENSOR: Auto direction mode -> " + currentMode);
+            Serial.println("TRIGGER SENSOR GPIO4: Mode -> input");
+          } else {
+            Serial.println("TRIGGER SENSOR GPIO4: Mode input");
           }
-        }
-
-        if (isTriggerSensorBlocked(triggerState)) {  // Khi phát hiện vật thể
           isCountingEnabled = true;  // Kích hoạt cảm biến đếm
-          Serial.println("TRIGGER SENSOR: Phat hien vat the -> Kich hoat dem! Active=" + String(sensorLevelName(currentMode == "input" ? inputSensorActiveLevel : outputSensorActiveLevel)));
+          Serial.println("TRIGGER SENSOR GPIO4: Phat hien vat the -> Kich hoat dem! Active=" + String(sensorLevelName(inputSensorActiveLevel)));
           Serial.print("isCountingEnabled = ");
           Serial.println(isCountingEnabled);
+          publishStatusMQTT();
+          publishSensorData();
         } else {
-          Serial.println("TRIGGER SENSOR: Khong con vat the");
+          Serial.println("TRIGGER SENSOR GPIO4: Khong con vat the");
         }
       }
     }
-    lastTriggerState = triggerReading;
+    lastTriggerState = inputTriggerReading;
+
+    if (outputTriggerReading != lastOutputTriggerState) {
+      outputTriggerDebounceTime = millis();
+    }
+
+    if ((millis() - outputTriggerDebounceTime) > debounceDelay) {
+      if (outputTriggerReading != outputTriggerState ||
+          (isOutputTriggerBlocked(outputTriggerReading) && (!isCountingEnabled || currentMode != "output"))) {
+        outputTriggerState = outputTriggerReading;
+
+        if (isOutputTriggerBlocked(outputTriggerState)) {  // Khi phát hiện vật thể ở chiều xuất
+          if (currentMode != "output") {
+            currentMode = "output";
+            needUpdate = true;
+            Serial.println("TRIGGER SENSOR GPIO39: Mode -> output");
+          } else {
+            Serial.println("TRIGGER SENSOR GPIO39: Mode output");
+          }
+          isCountingEnabled = true;  // Kích hoạt cảm biến đếm
+          Serial.println("TRIGGER SENSOR GPIO39: Phat hien vat the -> Kich hoat dem! Active=" + String(sensorLevelName(outputSensorActiveLevel)));
+          Serial.print("isCountingEnabled = ");
+          Serial.println(isCountingEnabled);
+          publishStatusMQTT();
+          publishSensorData();
+        } else {
+          Serial.println("TRIGGER SENSOR GPIO39: Khong con vat the");
+        }
+      }
+    }
+    lastOutputTriggerState = outputTriggerReading;
   }
 
   // Chỉ đếm khi được kích hoạt - SỬ DỤNG SETTINGS ĐỒNG BỘ

@@ -63,6 +63,7 @@ struct decode_results;
 
 #define SENSOR_PIN 40
 #define TRIGGER_SENSOR_PIN 4
+#define OUTPUT_TRIGGER_SENSOR_PIN 39
 #define START_LED_PIN 38
 #define DONE_LED_PIN 5
 #define BUTTON_PIN3 2
@@ -228,6 +229,10 @@ struct CounterState {
   int sensorState = DEFAULT_SENSOR_CLEAR_LEVEL;
   int lastTriggerState = HIGH;
   int triggerState;
+  int lastOutputTriggerState = HIGH;
+  int outputTriggerState = HIGH;
+  unsigned long inputTriggerDebounceTime = 0;
+  unsigned long outputTriggerDebounceTime = 0;
   bool isCountingEnabled = false;
   bool isTriggerEnabled = false;
   bool isCounting = false;
@@ -410,6 +415,10 @@ static auto& lastSensorState = app.counter.lastSensorState;
 static auto& sensorState = app.counter.sensorState;
 static auto& lastTriggerState = app.counter.lastTriggerState;
 static auto& triggerState = app.counter.triggerState;
+static auto& lastOutputTriggerState = app.counter.lastOutputTriggerState;
+static auto& outputTriggerState = app.counter.outputTriggerState;
+static auto& inputTriggerDebounceTime = app.counter.inputTriggerDebounceTime;
+static auto& outputTriggerDebounceTime = app.counter.outputTriggerDebounceTime;
 static auto& isCountingEnabled = app.counter.isCountingEnabled;
 static auto& isTriggerEnabled = app.counter.isTriggerEnabled;
 static auto& isCounting = app.counter.isCounting;
@@ -529,6 +538,14 @@ inline bool isOutputSensorBlocked(int state) {
 
 inline bool isTriggerSensorBlocked(int state) {
   return currentMode == "input" ? isInputSensorBlocked(state) : isOutputSensorBlocked(state);
+}
+
+inline bool isInputTriggerBlocked(int state) {
+  return isInputSensorBlocked(state);
+}
+
+inline bool isOutputTriggerBlocked(int state) {
+  return isOutputSensorBlocked(state);
 }
 
 int calculateDynamicBagDetectionDelay();

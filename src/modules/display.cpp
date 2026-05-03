@@ -141,8 +141,8 @@ static void drawAccentMark15(int x, int y, char mark, uint16_t color) {
 
   switch (mark) {
     case '\'':
-      drawScaledPixel15(x, y, 3, 0, color);
-      drawScaledPixel15(x, y, 2, 1, color);
+      drawScaledPixel15(x, y, 4, 0, color);
+      drawScaledPixel15(x, y, 3, 1, color);
       break;
     case '`':
       drawScaledPixel15(x, y, 2, 0, color);
@@ -170,7 +170,8 @@ static void drawShapeMark15(int x, int y, char mark, uint16_t color) {
     case '^':
       drawScaledPixel15(x, y, 2, 1, color);
       drawScaledPixel15(x, y, 3, 0, color);
-      drawScaledPixel15(x, y, 4, 1, color);
+      drawScaledPixel15(x, y, 4, 0, color);
+      drawScaledPixel15(x, y, 5, 1, color);
       break;
     case '(':
       drawScaledPixel15(x, y, 1, 0, color);

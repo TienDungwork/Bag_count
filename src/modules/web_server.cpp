@@ -114,7 +114,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(768);
     
     // TRẢ VỀ STATUS ĐÚNG THEO TRẠNG THÁI THỰC TẾ CỦA HỆ THỐNG
     String currentStatus = "WAIT";  // Default
@@ -159,6 +159,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["timestamp"] = millis();
     doc["sensorEnabled"] = isCountingEnabled;
     doc["triggerEnabled"] = isTriggerEnabled;
+    doc["setMode"] = currentMode;
+    doc["currentMode"] = currentMode;
     doc["limitReached"] = isLimitReached;
     doc["currentTime"] = getTimeStr();
     
@@ -1560,6 +1562,14 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
     doc["sensorBlocked"] = isSensorBlocked(sensorReading);
     doc["sensorActiveLevel"] = sensorLevelName(countSensorActiveLevel);
+    int inputTriggerReading = digitalRead(TRIGGER_SENSOR_PIN);
+    int outputTriggerReading = digitalRead(OUTPUT_TRIGGER_SENSOR_PIN);
+    doc["setMode"] = currentMode;
+    doc["currentMode"] = currentMode;
+    doc["inputTriggerState"] = isInputTriggerBlocked(inputTriggerReading) ? "DETECTED" : "CLEAR";
+    doc["outputTriggerState"] = isOutputTriggerBlocked(outputTriggerReading) ? "DETECTED" : "CLEAR";
+    doc["inputTriggerCurrentState"] = sensorRawStateName(inputTriggerReading);
+    doc["outputTriggerCurrentState"] = sensorRawStateName(outputTriggerReading);
     
     // Add debug info about settings source
     doc["_debug"] = LittleFS.exists("/settings.json") ? "file" : "defaults";

@@ -308,6 +308,8 @@ void publishStatusMQTT() {
   doc["limitReached"] = isLimitReached;
   doc["sensorEnabled"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
+  doc["setMode"] = currentMode;
+  doc["currentMode"] = currentMode;
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
   int sensorReading = digitalRead(SENSOR_PIN);
@@ -375,17 +377,26 @@ void publishAlert(String alertType, String message) {
 }
 
 void publishSensorData() {
-  DynamicJsonDocument doc(768);
+  DynamicJsonDocument doc(1024);
   doc["deviceId"] = conveyorName;
   doc["sensorTriggered"] = isCountingEnabled;
   doc["triggerEnabled"] = isTriggerEnabled;
   doc["lastTrigger"] = millis();
   int sensorReading = digitalRead(SENSOR_PIN);
   doc["sensorState"] = isSensorBlocked(sensorReading) ? "DETECTED" : "CLEAR";
-  int triggerReading = digitalRead(TRIGGER_SENSOR_PIN);
-  doc["triggerState"] = isTriggerSensorBlocked(triggerReading) ? "DETECTED" : "CLEAR";
-  doc["triggerCurrentState"] = sensorRawStateName(triggerReading);
+  int inputTriggerReading = digitalRead(TRIGGER_SENSOR_PIN);
+  int outputTriggerReading = digitalRead(OUTPUT_TRIGGER_SENSOR_PIN);
+  doc["setMode"] = currentMode;
+  doc["currentMode"] = currentMode;
+  doc["triggerState"] = currentMode == "input"
+    ? (isInputTriggerBlocked(inputTriggerReading) ? "DETECTED" : "CLEAR")
+    : (isOutputTriggerBlocked(outputTriggerReading) ? "DETECTED" : "CLEAR");
+  doc["triggerCurrentState"] = currentMode == "input" ? sensorRawStateName(inputTriggerReading) : sensorRawStateName(outputTriggerReading);
   doc["triggerActiveLevel"] = sensorLevelName(currentMode == "input" ? inputSensorActiveLevel : outputSensorActiveLevel);
+  doc["inputTriggerState"] = isInputTriggerBlocked(inputTriggerReading) ? "DETECTED" : "CLEAR";
+  doc["outputTriggerState"] = isOutputTriggerBlocked(outputTriggerReading) ? "DETECTED" : "CLEAR";
+  doc["inputTriggerCurrentState"] = sensorRawStateName(inputTriggerReading);
+  doc["outputTriggerCurrentState"] = sensorRawStateName(outputTriggerReading);
   doc["inputSensorActiveLevel"] = sensorLevelName(inputSensorActiveLevel);
   doc["outputSensorActiveLevel"] = sensorLevelName(outputSensorActiveLevel);
   doc["lastMeasuredTime"] = lastMeasuredTime;
