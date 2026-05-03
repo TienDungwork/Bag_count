@@ -223,6 +223,12 @@ static int utf8CharCount(const String& text) {
   return count;
 }
 
+static int keepTextCenterY(int oldY, uint8_t oldSize, uint8_t newSize) {
+  int oldHeight = 8 * oldSize;
+  int newHeight = 8 * newSize;
+  return oldY + (oldHeight - newHeight) / 2;
+}
+
 //----------------------------------------Display Functions
 void updateDisplay() {
   // Kiểm tra dma_display có khả dụng không
@@ -271,7 +277,7 @@ void updateDisplay() {
   }
 
   if (noOrder) {
-    drawVietnameseText(1, 6, displayText, myYELLOW, 1);
+    drawVietnameseText(1, keepTextCenterY(6, 1, 2), displayText, myYELLOW, 2);
   } else {
     int maxCodeLen = 10;
     if (utf8CharCount(displayText) > maxCodeLen) {
@@ -309,7 +315,7 @@ void updateDisplay() {
   } else {
     modeLabel = "NHẬP:";
   }
-  drawVietnameseText(1, 22, modeLabel, myCYAN, 1);
+  drawVietnameseText(1, keepTextCenterY(22, 1, 2), modeLabel, myCYAN, 2);
   
   needUpdate = false;
 }
