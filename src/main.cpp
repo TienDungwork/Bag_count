@@ -185,14 +185,8 @@ void setup() {
   // Hiển thị Connecting ngay lập tức (không chờ timer)
   dma_display->clearScreen();
   
-  // "KINH BAC GROUP" căn giữa (text size 1)
-  String kinhbacText = "KINH BAC GROUP";
-  dma_display->setTextSize(1.6);
-  dma_display->setTextColor(myYELLOW);
-  dma_display->getTextBounds(kinhbacText, 0, 0, &x1, &y1, &w, &h);
-  int kinhbacX = (totalWidth - w) / 2;
-  dma_display->setCursor(kinhbacX, 8);
-  dma_display->print(kinhbacText);
+  // "BỘ ĐẾM THÔNG MINH" căn giữa
+  drawVietnameseText(10, 10, "BỘ ĐẾM THÔNG MINH", myYELLOW, 1);
   
   // Dấu chấm căn giữa (text size 2)
   dma_display->setTextSize(1.6);
