@@ -57,6 +57,105 @@ static void drawShapeMark(int x, int y, char mark, uint16_t color) {
   }
 }
 
+static bool glyphColumns(char c, uint8_t out[5]) {
+  switch (c) {
+    case ' ': out[0] = 0x00; out[1] = 0x00; out[2] = 0x00; out[3] = 0x00; out[4] = 0x00; return true;
+    case ':': out[0] = 0x00; out[1] = 0x00; out[2] = 0x14; out[3] = 0x00; out[4] = 0x00; return true;
+    case 'A': out[0] = 0x7C; out[1] = 0x12; out[2] = 0x11; out[3] = 0x12; out[4] = 0x7C; return true;
+    case 'C': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x22; return true;
+    case 'D': out[0] = 0x7F; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x3E; return true;
+    case 'H': out[0] = 0x7F; out[1] = 0x08; out[2] = 0x08; out[3] = 0x08; out[4] = 0x7F; return true;
+    case 'N': out[0] = 0x7F; out[1] = 0x04; out[2] = 0x08; out[3] = 0x10; out[4] = 0x7F; return true;
+    case 'O': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x3E; return true;
+    case 'P': out[0] = 0x7F; out[1] = 0x09; out[2] = 0x09; out[3] = 0x09; out[4] = 0x06; return true;
+    case 'T': out[0] = 0x03; out[1] = 0x01; out[2] = 0x7F; out[3] = 0x01; out[4] = 0x03; return true;
+    case 'U': out[0] = 0x3F; out[1] = 0x40; out[2] = 0x40; out[3] = 0x40; out[4] = 0x3F; return true;
+    case 'X': out[0] = 0x63; out[1] = 0x14; out[2] = 0x08; out[3] = 0x14; out[4] = 0x63; return true;
+  }
+  return false;
+}
+
+static int scale15(int value) {
+  return (value * 3) / 2;
+}
+
+static void drawScaledPixel15(int x, int y, int srcX, int srcY, uint16_t color) {
+  int x0 = x + scale15(srcX);
+  int x1 = x + scale15(srcX + 1);
+  int y0 = y + scale15(srcY);
+  int y1 = y + scale15(srcY + 1);
+  dma_display->fillRect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0), color);
+}
+
+static void drawScaledAsciiChar15(int x, int y, char c, uint16_t color) {
+  uint8_t columns[5];
+  if (!glyphColumns(c, columns)) {
+    dma_display->setTextSize(1);
+    dma_display->setTextColor(color);
+    dma_display->setCursor(x, y + 2);
+    dma_display->print(c);
+    return;
+  }
+
+  for (int col = 0; col < 5; col++) {
+    uint8_t line = columns[col];
+    for (int row = 0; row < 8; row++, line >>= 1) {
+      if (line & 1) {
+        drawScaledPixel15(x, y, col, row, color);
+      }
+    }
+  }
+}
+
+static void drawAccentMark15(int x, int y, char mark, uint16_t color) {
+  if (!dma_display || mark == 0) return;
+
+  switch (mark) {
+    case '\'':
+      drawScaledPixel15(x, y, 3, 0, color);
+      drawScaledPixel15(x, y, 2, 1, color);
+      break;
+    case '`':
+      drawScaledPixel15(x, y, 2, 0, color);
+      drawScaledPixel15(x, y, 3, 1, color);
+      break;
+    case '?':
+      drawScaledPixel15(x, y, 2, 0, color);
+      drawScaledPixel15(x, y, 3, 0, color);
+      drawScaledPixel15(x, y, 3, 1, color);
+      drawScaledPixel15(x, y, 2, 2, color);
+      break;
+    case '~':
+      drawScaledPixel15(x, y, 1, 1, color);
+      drawScaledPixel15(x, y, 2, 0, color);
+      drawScaledPixel15(x, y, 3, 1, color);
+      drawScaledPixel15(x, y, 4, 0, color);
+      break;
+  }
+}
+
+static void drawShapeMark15(int x, int y, char mark, uint16_t color) {
+  if (!dma_display || mark == 0) return;
+
+  switch (mark) {
+    case '^':
+      drawScaledPixel15(x, y, 2, 1, color);
+      drawScaledPixel15(x, y, 3, 0, color);
+      drawScaledPixel15(x, y, 4, 1, color);
+      break;
+    case '(':
+      drawScaledPixel15(x, y, 1, 0, color);
+      drawScaledPixel15(x, y, 2, 1, color);
+      drawScaledPixel15(x, y, 3, 1, color);
+      drawScaledPixel15(x, y, 4, 0, color);
+      break;
+    case '+':
+      drawScaledPixel15(x, y, 4, 1, color);
+      drawScaledPixel15(x, y, 5, 0, color);
+      break;
+  }
+}
+
 static VietnameseGlyph glyphFromUtf8(const String& text, int& index) {
   String ch = text.substring(index, index + 1);
   unsigned char first = text[index];
@@ -142,37 +241,50 @@ static VietnameseGlyph glyphFromUtf8(const String& text, int& index) {
   return {base, 0, 0, false, false};
 }
 
-void drawVietnameseText(int x, int y, const String& text, uint16_t color, uint8_t textSize) {
+void drawVietnameseText(int x, int y, const String& text, uint16_t color, float textSize) {
   if (!dma_display) return;
 
   int cursorX = x;
   int i = 0;
-  int charWidth = 6 * textSize;
-  int topY = std::max(0, y - 4);
-  int shapeY = std::max(0, y - 2);
-  int dotY = y + (8 * textSize);
+  bool scale15Text = textSize > 1.4f && textSize < 1.6f;
+  int intTextSize = (int)textSize;
+  int charWidth = scale15Text ? 9 : 6 * intTextSize;
+  int topY = std::max(0, y - (scale15Text ? 6 : 4));
+  int shapeY = std::max(0, y - (scale15Text ? 3 : 2));
+  int dotY = y + (scale15Text ? 12 : 8 * intTextSize);
 
-  dma_display->setTextSize(textSize);
+  dma_display->setTextSize(intTextSize);
   dma_display->setTextColor(color);
 
   while (i < (int)text.length()) {
     VietnameseGlyph glyph = glyphFromUtf8(text, i);
-    dma_display->setCursor(cursorX, y);
-    dma_display->print(glyph.base);
-    dma_display->setCursor(cursorX + 1, y);
-    dma_display->print(glyph.base);
+    if (scale15Text) {
+      drawScaledAsciiChar15(cursorX, y, glyph.base, color);
+    } else {
+      dma_display->setCursor(cursorX, y);
+      dma_display->print(glyph.base);
+    }
 
     if (glyph.stroke) {
-      dma_display->drawLine(cursorX + 1, y + 4, cursorX + 5, y + 2, color);
-      dma_display->drawLine(cursorX + 2, y + 4, cursorX + 6, y + 2, color);
+      if (scale15Text) {
+        dma_display->drawLine(cursorX + 2, y + 6, cursorX + 8, y + 3, color);
+      } else {
+        dma_display->drawLine(cursorX + 1, y + 4, cursorX + 5, y + 2, color);
+      }
     }
-    drawShapeMark(cursorX, shapeY, glyph.shapeMark, color);
-    drawShapeMark(cursorX + 1, shapeY, glyph.shapeMark, color);
-    drawAccentMark(cursorX, topY, glyph.topMark, color);
-    drawAccentMark(cursorX + 1, topY, glyph.topMark, color);
+    if (scale15Text) {
+      drawShapeMark15(cursorX, shapeY, glyph.shapeMark, color);
+      drawAccentMark15(cursorX, topY, glyph.topMark, color);
+    } else {
+      drawShapeMark(cursorX, shapeY, glyph.shapeMark, color);
+      drawAccentMark(cursorX, topY, glyph.topMark, color);
+    }
     if (glyph.dotBelow) {
-      dma_display->drawPixel(cursorX + 3, dotY, color);
-      dma_display->drawPixel(cursorX + 4, dotY, color);
+      if (scale15Text) {
+        drawScaledPixel15(cursorX, dotY, 3, 0, color);
+      } else {
+        dma_display->drawPixel(cursorX + 3, dotY, color);
+      }
     }
 
     cursorX += charWidth;
@@ -223,12 +335,6 @@ static int utf8CharCount(const String& text) {
   return count;
 }
 
-static int keepTextCenterY(int oldY, uint8_t oldSize, uint8_t newSize) {
-  int oldHeight = 8 * oldSize;
-  int newHeight = 8 * newSize;
-  return oldY + (oldHeight - newHeight) / 2;
-}
-
 //----------------------------------------Display Functions
 void updateDisplay() {
   // Kiểm tra dma_display có khả dụng không
@@ -277,7 +383,7 @@ void updateDisplay() {
   }
 
   if (noOrder) {
-    drawVietnameseText(1, keepTextCenterY(6, 1, 2), displayText, myYELLOW, 2);
+    drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
     int maxCodeLen = 10;
     if (utf8CharCount(displayText) > maxCodeLen) {
@@ -315,7 +421,11 @@ void updateDisplay() {
   } else {
     modeLabel = "NHẬP:";
   }
-  drawVietnameseText(1, keepTextCenterY(22, 1, 2), modeLabel, myCYAN, 2);
+  drawVietnameseText(1, 19, modeLabel, myCYAN, 1.5f);
+  dma_display->setTextSize(1);
+  dma_display->setTextColor(myCYAN);
+  dma_display->setCursor(50, 22);
+  dma_display->print(String(targetCount));
   
   needUpdate = false;
 }

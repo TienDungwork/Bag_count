@@ -504,7 +504,7 @@ void updateDisplay();
 void displayCurrentOrderInfo();
 void showConnectingDisplay();
 void showNetworkIpDisplay();
-void drawVietnameseText(int x, int y, const String& text, uint16_t color, uint8_t textSize = 1);
+void drawVietnameseText(int x, int y, const String& text, uint16_t color, float textSize = 1);
 void setSystemConnected();
 
 inline int sensorClearLevelForActive(int activeLevel) {
