@@ -76,8 +76,8 @@ struct decode_results;
 #define BAGTYPES_FILE "/bagtypes.json"
 #define BAGCONFIGS_FILE "/bagconfigs.json"
 
-static const int COUNT_SENSOR_DETECTED_LEVEL = LOW;
-static const int COUNT_SENSOR_CLEAR_LEVEL = HIGH;
+static const int DEFAULT_SENSOR_DETECTED_LEVEL = LOW;
+static const int DEFAULT_SENSOR_CLEAR_LEVEL = HIGH;
 static const uint16_t REALTIME_WS_PORT = 81;
 static const unsigned long MQTT_PUBLISH_INTERVAL = 500;
 static const unsigned long HEARTBEAT_INTERVAL = 3000;
@@ -121,12 +121,12 @@ struct BagConfig {
   String status;
 };
 
-inline bool isSensorBlocked(int state) {
-  return state == COUNT_SENSOR_DETECTED_LEVEL;
-}
-
 inline const char* sensorRawStateName(int state) {
   return state == HIGH ? "HIGH" : "LOW";
+}
+
+inline const char* sensorLevelName(int level) {
+  return level == HIGH ? "HIGH" : "LOW";
 }
 
 struct NetworkState {
@@ -186,6 +186,9 @@ struct SettingsState {
   int relayDelayAfterComplete;
   int bagTimeMultiplier;
   bool enableWeightBasedDelay = false;
+  int countSensorActiveLevel = DEFAULT_SENSOR_DETECTED_LEVEL;
+  int inputSensorActiveLevel = DEFAULT_SENSOR_DETECTED_LEVEL;
+  int outputSensorActiveLevel = DEFAULT_SENSOR_DETECTED_LEVEL;
   std::vector<WeightDelayRule> weightDelayRules;
 };
 
@@ -199,7 +202,7 @@ struct CounterState {
   unsigned long sensorActiveStartTime = 0;
   unsigned long lastMeasuredTime = 0;
   bool isMeasuringSensor = false;
-  int lastTimingSensorState = COUNT_SENSOR_CLEAR_LEVEL;
+  int lastTimingSensorState = DEFAULT_SENSOR_CLEAR_LEVEL;
   unsigned long orderCompleteTime = 0;
   bool isOrderComplete = false;
   bool isRelayDelayActive = false;
@@ -221,8 +224,8 @@ struct CounterState {
   String currentSystemStatus = "RESET";
   unsigned long lastDebounceTime = 0;
   unsigned long debounceDelay = 0;
-  int lastSensorState = COUNT_SENSOR_CLEAR_LEVEL;
-  int sensorState = COUNT_SENSOR_CLEAR_LEVEL;
+  int lastSensorState = DEFAULT_SENSOR_CLEAR_LEVEL;
+  int sensorState = DEFAULT_SENSOR_CLEAR_LEVEL;
   int lastTriggerState = HIGH;
   int triggerState;
   bool isCountingEnabled = false;
@@ -245,6 +248,9 @@ struct DisplayState {
   uint16_t myCYAN;
   bool systemConnected = false;
   bool showConnectingAnimation = true;
+  bool showNetworkIp = false;
+  unsigned long showNetworkIpUntil = 0;
+  String networkIpText = "";
   unsigned long connectingAnimationTime = 0;
   int connectingDots = 0;
 };
@@ -343,6 +349,9 @@ static auto& sensorDelayMs = app.settings.sensorDelayMs;
 static auto& relayDelayAfterComplete = app.settings.relayDelayAfterComplete;
 static auto& bagTimeMultiplier = app.settings.bagTimeMultiplier;
 static auto& enableWeightBasedDelay = app.settings.enableWeightBasedDelay;
+static auto& countSensorActiveLevel = app.settings.countSensorActiveLevel;
+static auto& inputSensorActiveLevel = app.settings.inputSensorActiveLevel;
+static auto& outputSensorActiveLevel = app.settings.outputSensorActiveLevel;
 static auto& weightDelayRules = app.settings.weightDelayRules;
 static auto& lastBagTime = app.counter.lastBagTime;
 static auto& bagStartTime = app.counter.bagStartTime;
@@ -410,6 +419,9 @@ static auto& startLedOn = app.counter.startLedOn;
 static auto& doneLedOn = app.counter.doneLedOn;
 static auto& systemConnected = app.display.systemConnected;
 static auto& showConnectingAnimation = app.display.showConnectingAnimation;
+static auto& showNetworkIp = app.display.showNetworkIp;
+static auto& showNetworkIpUntil = app.display.showNetworkIpUntil;
+static auto& networkIpText = app.display.networkIpText;
 static auto& connectingAnimationTime = app.display.connectingAnimationTime;
 static auto& connectingDots = app.display.connectingDots;
 static auto& productsData = app.storage.productsData;
@@ -491,7 +503,32 @@ void setupWebServer();
 void updateDisplay();
 void displayCurrentOrderInfo();
 void showConnectingDisplay();
+void showNetworkIpDisplay();
 void setSystemConnected();
+
+inline int sensorClearLevelForActive(int activeLevel) {
+  return activeLevel == HIGH ? LOW : HIGH;
+}
+
+inline bool isCountSensorBlocked(int state) {
+  return state == countSensorActiveLevel;
+}
+
+inline bool isSensorBlocked(int state) {
+  return isCountSensorBlocked(state);
+}
+
+inline bool isInputSensorBlocked(int state) {
+  return state == inputSensorActiveLevel;
+}
+
+inline bool isOutputSensorBlocked(int state) {
+  return state == outputSensorActiveLevel;
+}
+
+inline bool isTriggerSensorBlocked(int state) {
+  return currentMode == "input" ? isInputSensorBlocked(state) : isOutputSensorBlocked(state);
+}
 
 int calculateDynamicBagDetectionDelay();
 int calculateBagCountFromDuration(unsigned long detectionDuration);

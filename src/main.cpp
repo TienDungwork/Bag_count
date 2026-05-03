@@ -370,9 +370,9 @@ void loop() {
     if ((millis() - lastDebounceTime) > debounceDelay) {
       if (triggerReading != triggerState) {
         triggerState = triggerReading;
-        if (triggerState == LOW) {  // Khi phát hiện vật thể
+        if (isTriggerSensorBlocked(triggerState)) {  // Khi phát hiện vật thể
           isCountingEnabled = true;  // Kích hoạt cảm biến đếm
-          Serial.println("TRIGGER SENSOR: Phat hien vat the -> Kich hoat dem!");
+          Serial.println("TRIGGER SENSOR: Phat hien vat the -> Kich hoat dem! Active=" + String(sensorLevelName(currentMode == "input" ? inputSensorActiveLevel : outputSensorActiveLevel)));
           Serial.print("isCountingEnabled = ");
           Serial.println(isCountingEnabled);
         } else {
@@ -417,7 +417,7 @@ void loop() {
         
         // IN RA TRẠNG THÁI SENSOR KHI CÓ THAY ĐỔI
         Serial.print("SENSOR THAY ĐỔI: ");
-        Serial.println(isSensorBlocked(sensorState) ? "LOW (có vật thể)" : "HIGH (không có vật thể)");
+        Serial.println(isSensorBlocked(sensorState) ? String(sensorLevelName(countSensorActiveLevel)) + " (có vật thể)" : String(sensorRawStateName(sensorState)) + " (không có vật thể)");
 
         if (isSensorBlocked(sensorState)) {  // LOW khi phát hiện bao
           unsigned long currentTime = millis();

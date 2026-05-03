@@ -1512,7 +1512,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
   server.on("/api/settings", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     
     // Trả về giá trị hiện tại từ biến global (đã được load từ file)
     doc["conveyorName"] = conveyorName;
@@ -1527,6 +1527,12 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["brightness"] = 100;
     doc["relayDelayAfterComplete"] = relayDelayAfterComplete;
     doc["bagTimeMultiplier"] = bagTimeMultiplier;
+    doc["countSensorActiveLevel"] = countSensorActiveLevel;
+    doc["inputSensorActiveLevel"] = inputSensorActiveLevel;
+    doc["outputSensorActiveLevel"] = outputSensorActiveLevel;
+    doc["countSensorActiveLevelName"] = sensorLevelName(countSensorActiveLevel);
+    doc["inputSensorActiveLevelName"] = sensorLevelName(inputSensorActiveLevel);
+    doc["outputSensorActiveLevelName"] = sensorLevelName(outputSensorActiveLevel);
     
     doc["realtimePort"] = REALTIME_WS_PORT;
     doc["realtimePath"] = "/ws";
@@ -1553,7 +1559,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     int sensorReading = digitalRead(SENSOR_PIN);
     doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
     doc["sensorBlocked"] = isSensorBlocked(sensorReading);
-    doc["sensorActiveLevel"] = "LOW";
+    doc["sensorActiveLevel"] = sensorLevelName(countSensorActiveLevel);
     
     // Add debug info about settings source
     doc["_debug"] = LittleFS.exists("/settings.json") ? "file" : "defaults";
@@ -1568,7 +1574,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
     if (server.hasArg("plain")) {
-      DynamicJsonDocument doc(1024);
+      DynamicJsonDocument doc(2048);
       deserializeJson(doc, server.arg("plain"));
       
       Serial.println("Receiving settings from web, applying and saving...");
@@ -1628,6 +1634,24 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         int oldValue = ::bagTimeMultiplier;
         ::bagTimeMultiplier = doc["bagTimeMultiplier"];
         Serial.println("  bagTimeMultiplier: " + String(oldValue) + "% → " + String(::bagTimeMultiplier) + "%");
+      }
+
+      if (doc.containsKey("countSensorActiveLevel")) {
+        int oldValue = countSensorActiveLevel;
+        countSensorActiveLevel = doc["countSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("  countSensorActiveLevel: " + String(sensorLevelName(oldValue)) + " → " + String(sensorLevelName(countSensorActiveLevel)));
+      }
+
+      if (doc.containsKey("inputSensorActiveLevel")) {
+        int oldValue = inputSensorActiveLevel;
+        inputSensorActiveLevel = doc["inputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("  inputSensorActiveLevel: " + String(sensorLevelName(oldValue)) + " → " + String(sensorLevelName(inputSensorActiveLevel)));
+      }
+
+      if (doc.containsKey("outputSensorActiveLevel")) {
+        int oldValue = outputSensorActiveLevel;
+        outputSensorActiveLevel = doc["outputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("  outputSensorActiveLevel: " + String(sensorLevelName(oldValue)) + " → " + String(sensorLevelName(outputSensorActiveLevel)));
       }
       
       // MQTT2 settings (Server anh Dũng)
@@ -1747,6 +1771,9 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       Serial.println("  - Min Bag Interval: " + String(::minBagInterval) + "ms");
       Serial.println("  - Auto Reset: " + String(::autoReset ? "true" : "false"));
       Serial.println("  - Relay Delay After Complete: " + String(::relayDelayAfterComplete) + "ms");
+      Serial.println("  - Count Sensor Active Level: " + String(sensorLevelName(countSensorActiveLevel)));
+      Serial.println("  - Input Sensor Active Level: " + String(sensorLevelName(inputSensorActiveLevel)));
+      Serial.println("  - Output Sensor Active Level: " + String(sensorLevelName(outputSensorActiveLevel)));
       if (ethIP.length() > 0) {
         Serial.println("  - Ethernet IP: " + ethIP);
       }
@@ -3094,7 +3121,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     int sensorReading = digitalRead(SENSOR_PIN);
     doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
     doc["sensorBlocked"] = isSensorBlocked(sensorReading);
-    doc["sensorActiveLevel"] = "LOW";
+    doc["sensorActiveLevel"] = sensorLevelName(countSensorActiveLevel);
     if (isMeasuringSensor) {
       doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
     }

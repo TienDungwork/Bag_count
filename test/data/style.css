@@ -3249,6 +3249,56 @@ input[type="checkbox"] {
   margin: 10px 0;
 }
 
+.sensor-level-config {
+  margin: 16px 0;
+}
+
+.sensor-level-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sensor-level-row {
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fff;
+}
+
+.sensor-level-row span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.sensor-level-btn {
+  min-width: 58px;
+  height: 34px;
+  border: 1px solid #98a2b3;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #344054;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sensor-level-btn.active-high {
+  border-color: #1570ef;
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+@media (max-width: 720px) {
+  .sensor-level-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sensor-timing-display {
   margin-bottom: 15px;
 }

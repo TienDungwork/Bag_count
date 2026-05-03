@@ -638,8 +638,8 @@ void updateCount(int bagCount) {
           
           // RESET TRẠNG THÁI SENSOR ĐỂ TRÁNH ĐẾM NHẦM
           sensorActiveStartTime = 0;
-          lastSensorState = COUNT_SENSOR_CLEAR_LEVEL;
-          sensorState = COUNT_SENSOR_CLEAR_LEVEL;
+          lastSensorState = sensorClearLevelForActive(countSensorActiveLevel);
+          sensorState = sensorClearLevelForActive(countSensorActiveLevel);
           lastBagTime = 0;
           isBagDetected = false;
           waitingForInterval = false;

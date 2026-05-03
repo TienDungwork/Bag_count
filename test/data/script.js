@@ -85,6 +85,9 @@ let settings = {
   autoReset: false,
   brightness: 100,
   relayDelayAfterComplete: 5000,
+  countSensorActiveLevel: 0,
+  inputSensorActiveLevel: 0,
+  outputSensorActiveLevel: 0,
   // Weight-based detection delay configuration - LUÔN BẬT
   weightDelayRules: [
     { weight: 50, delay: 3000 },  // 50kg -> 3000ms
@@ -4168,6 +4171,9 @@ async function loadSettingsFromESP32() {
       if (esp32Settings.minBagInterval !== undefined) settings.minBagInterval = esp32Settings.minBagInterval;
       if (esp32Settings.autoReset !== undefined) settings.autoReset = esp32Settings.autoReset;
       if (esp32Settings.relayDelayAfterComplete !== undefined) settings.relayDelayAfterComplete = esp32Settings.relayDelayAfterComplete;
+      if (esp32Settings.countSensorActiveLevel !== undefined) settings.countSensorActiveLevel = esp32Settings.countSensorActiveLevel;
+      if (esp32Settings.inputSensorActiveLevel !== undefined) settings.inputSensorActiveLevel = esp32Settings.inputSensorActiveLevel;
+      if (esp32Settings.outputSensorActiveLevel !== undefined) settings.outputSensorActiveLevel = esp32Settings.outputSensorActiveLevel;
       
       // MQTT2 settings (Server báo cáo)
       if (esp32Settings.mqtt2Server !== undefined) settings.mqtt2Server = esp32Settings.mqtt2Server;
@@ -4223,6 +4229,7 @@ function updateSettingsForm() {
   if (autoResetEl) autoResetEl.checked = settings.autoReset || false;
   settings.brightness = 100;
   if (relayDelayEl) relayDelayEl.value = (settings.relayDelayAfterComplete || 5000) / 1000; // Convert ms to seconds
+  updateSensorLevelButtons();
   
   // MQTT2 settings (Server báo cáo)
   const mqtt2ServerEl = document.getElementById('mqtt2Server');
@@ -4249,6 +4256,37 @@ function updateSettingsForm() {
   
   // CẬP NHẬT TÊN BĂNG TẢI TRÊN HEADER
   updateConveyorNameDisplay();
+}
+
+function sensorLevelLabel(level) {
+  return Number(level) === 1 ? 'HIGH' : 'LOW';
+}
+
+function updateSensorLevelButton(id, level) {
+  const button = document.getElementById(id);
+  if (!button) return;
+
+  button.textContent = sensorLevelLabel(level);
+  button.classList.toggle('active-high', Number(level) === 1);
+}
+
+function updateSensorLevelButtons() {
+  updateSensorLevelButton('countSensorLevelBtn', settings.countSensorActiveLevel);
+  updateSensorLevelButton('inputSensorLevelBtn', settings.inputSensorActiveLevel);
+  updateSensorLevelButton('outputSensorLevelBtn', settings.outputSensorActiveLevel);
+}
+
+function toggleSensorLevel(sensorType) {
+  const keyMap = {
+    count: 'countSensorActiveLevel',
+    input: 'inputSensorActiveLevel',
+    output: 'outputSensorActiveLevel'
+  };
+  const key = keyMap[sensorType];
+  if (!key) return;
+
+  settings[key] = Number(settings[key]) === 1 ? 0 : 1;
+  updateSensorLevelButtons();
 }
 
 // Hàm cập nhật tên băng tải hiển thị
@@ -5127,6 +5165,9 @@ function saveGeneralSettings() {
   settings.autoReset = document.getElementById('autoReset').checked;
   settings.brightness = 100;
   settings.relayDelayAfterComplete = parseInt(document.getElementById('relayDelay').value) * 1000; // Convert seconds to ms
+  settings.countSensorActiveLevel = Number(settings.countSensorActiveLevel) === 1 ? 1 : 0;
+  settings.inputSensorActiveLevel = Number(settings.inputSensorActiveLevel) === 1 ? 1 : 0;
+  settings.outputSensorActiveLevel = Number(settings.outputSensorActiveLevel) === 1 ? 1 : 0;
   console.log('Saving settings to ESP32:', settings);
   
   // Lưu vào localStorage
@@ -5159,7 +5200,10 @@ function sendSettingsViaMQTT() {
         bagDetectionDelay: settings.bagDetectionDelay,
         bagTimeMultiplier: settings.bagTimeMultiplier,
         minBagInterval: settings.minBagInterval,
-        autoReset: settings.autoReset
+        autoReset: settings.autoReset,
+        countSensorActiveLevel: settings.countSensorActiveLevel,
+        inputSensorActiveLevel: settings.inputSensorActiveLevel,
+        outputSensorActiveLevel: settings.outputSensorActiveLevel
       };
       
       console.log('Sending settings via realtime WebSocket:', mqttSettings);
@@ -5565,6 +5609,9 @@ function saveSettings() {
   settings.autoReset = document.getElementById('autoReset').checked;
   settings.brightness = 100;
   settings.relayDelayAfterComplete = parseInt(document.getElementById('relayDelay').value) * 1000; // Convert seconds to ms
+  settings.countSensorActiveLevel = Number(settings.countSensorActiveLevel) === 1 ? 1 : 0;
+  settings.inputSensorActiveLevel = Number(settings.inputSensorActiveLevel) === 1 ? 1 : 0;
+  settings.outputSensorActiveLevel = Number(settings.outputSensorActiveLevel) === 1 ? 1 : 0;
   
   // MQTT2 settings (Server báo cáo)
   settings.mqtt2Server = document.getElementById('mqtt2Server').value;
@@ -5793,6 +5840,9 @@ function sendSettingsToESP32() {
     autoReset: settings.autoReset,
     bagTimeMultiplier: settings.bagTimeMultiplier,
     relayDelayAfterComplete: settings.relayDelayAfterComplete,
+    countSensorActiveLevel: settings.countSensorActiveLevel,
+    inputSensorActiveLevel: settings.inputSensorActiveLevel,
+    outputSensorActiveLevel: settings.outputSensorActiveLevel,
     // Weight-based delay settings
     weightDelayRules: settings.weightDelayRules,
     // MQTT2 settings
@@ -7666,12 +7716,17 @@ function renderSensorTimingDisplay(data) {
     ? Boolean(data.sensorBlocked)
     : (data.sensorState === 'DETECTED' || sensorState === 'LOW');
   const sensorStateClass = sensorBlocked ? 'sensor-state-blocked' : 'sensor-state-clear';
+  const sensorActiveLevel = data.sensorActiveLevel || sensorLevelLabel(settings.countSensorActiveLevel);
   const sensorStateLabel = `${sensorState} (${sensorBlocked ? 'có vật' : 'không có vật'})`;
   let html = `
     <div class="sensor-timing-info">
       <div class="timing-row">
         <span class="timing-label">Trạng thái sensor:</span>
         <span class="timing-value ${sensorStateClass}">${sensorStateLabel}</span>
+      </div>
+      <div class="timing-row">
+        <span class="timing-label">Mức tác động:</span>
+        <span class="timing-value">${sensorActiveLevel}</span>
       </div>
       <div class="timing-row">
         <span class="timing-label">Thời gian đo cuối:</span>

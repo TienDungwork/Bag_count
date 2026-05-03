@@ -186,6 +186,9 @@ void saveSettingsToFile() {
   doc["autoReset"] = autoReset;
   doc["relayDelayAfterComplete"] = relayDelayAfterComplete;
   doc["bagTimeMultiplier"] = bagTimeMultiplier;
+  doc["countSensorActiveLevel"] = countSensorActiveLevel;
+  doc["inputSensorActiveLevel"] = inputSensorActiveLevel;
+  doc["outputSensorActiveLevel"] = outputSensorActiveLevel;
   
   // MQTT2 settings (Server anh Dũng)
   doc["mqtt2Server"] = mqtt_server2;
@@ -227,7 +230,7 @@ void loadSettingsFromFile() {
     String content = file.readString();
     file.close();
     
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     if (deserializeJson(doc, content) == DeserializationError::Ok) {
       Serial.println("Found settings file, loading saved values:");
       
@@ -262,6 +265,9 @@ void loadSettingsFromFile() {
       autoReset = doc["autoReset"].as<bool>();
       relayDelayAfterComplete = doc["relayDelayAfterComplete"].as<int>();
       bagTimeMultiplier = doc["bagTimeMultiplier"] | 25;  // Default 25% nếu không có
+      countSensorActiveLevel = doc["countSensorActiveLevel"] | DEFAULT_SENSOR_DETECTED_LEVEL;
+      inputSensorActiveLevel = doc["inputSensorActiveLevel"] | DEFAULT_SENSOR_DETECTED_LEVEL;
+      outputSensorActiveLevel = doc["outputSensorActiveLevel"] | DEFAULT_SENSOR_DETECTED_LEVEL;
       
       // DEBUG: In giá trị minBagInterval được load
       Serial.println("🔧 LOADED minBagInterval từ settings: " + String(minBagInterval) + "ms");
@@ -321,6 +327,9 @@ void loadSettingsFromFile() {
       Serial.println("    minBagInterval: " + String(minBagInterval) + "ms");
       Serial.println("    autoReset: " + String(autoReset ? "true" : "false"));
       Serial.println("    relayDelayAfterComplete: " + String(relayDelayAfterComplete) + "ms");
+      Serial.println("    countSensorActiveLevel: " + String(sensorLevelName(countSensorActiveLevel)));
+      Serial.println("    inputSensorActiveLevel: " + String(sensorLevelName(inputSensorActiveLevel)));
+      Serial.println("    outputSensorActiveLevel: " + String(sensorLevelName(outputSensorActiveLevel)));
       Serial.println("All settings loaded from file successfully");
     } else {
       Serial.println("Failed to parse settings JSON - recreating file");
@@ -357,6 +366,9 @@ void createDefaultSettingsFile() {
   doc["autoReset"] = true;
   doc["relayDelayAfterComplete"] = 10000;
   doc["bagTimeMultiplier"] = 25;  // Default 25%
+  doc["countSensorActiveLevel"] = DEFAULT_SENSOR_DETECTED_LEVEL;
+  doc["inputSensorActiveLevel"] = DEFAULT_SENSOR_DETECTED_LEVEL;
+  doc["outputSensorActiveLevel"] = DEFAULT_SENSOR_DETECTED_LEVEL;
   
   // Weight-based Detection Delay settings - default values
   doc["enableWeightBasedDelay"] = false;
@@ -439,7 +451,7 @@ void debugSettingsFile() {
       
       Serial.println("Settings file content:");
       Serial.println(content);
-      DynamicJsonDocument doc(1024);
+      DynamicJsonDocument doc(2048);
       DeserializationError error = deserializeJson(doc, content);
       
       if (error) {
@@ -466,6 +478,9 @@ void debugSettingsFile() {
   Serial.println("  - bagDetectionDelay: " + String(bagDetectionDelay));
   Serial.println("  - minBagInterval: " + String(minBagInterval));
   Serial.println("  - autoReset: " + String(autoReset));
+  Serial.println("  - countSensorActiveLevel: " + String(sensorLevelName(countSensorActiveLevel)));
+  Serial.println("  - inputSensorActiveLevel: " + String(sensorLevelName(inputSensorActiveLevel)));
+  Serial.println("  - outputSensorActiveLevel: " + String(sensorLevelName(outputSensorActiveLevel)));
 }
 
 //----------------------------------------Data Storage Functions

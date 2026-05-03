@@ -218,26 +218,29 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         Serial.println("MQTT: Applied location: " + location);
         settingsChanged = true;
       }
+
+      if (doc.containsKey("countSensorActiveLevel")) {
+        countSensorActiveLevel = doc["countSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("MQTT: Applied countSensorActiveLevel: " + String(sensorLevelName(countSensorActiveLevel)));
+        settingsChanged = true;
+      }
+
+      if (doc.containsKey("inputSensorActiveLevel")) {
+        inputSensorActiveLevel = doc["inputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("MQTT: Applied inputSensorActiveLevel: " + String(sensorLevelName(inputSensorActiveLevel)));
+        settingsChanged = true;
+      }
+
+      if (doc.containsKey("outputSensorActiveLevel")) {
+        outputSensorActiveLevel = doc["outputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
+        Serial.println("MQTT: Applied outputSensorActiveLevel: " + String(sensorLevelName(outputSensorActiveLevel)));
+        settingsChanged = true;
+      }
       
       // Lưu settings vào file nếu có thay đổi
       if (settingsChanged) {
-        DynamicJsonDocument settingsDoc(1024);
-        settingsDoc["conveyorName"] = conveyorName;
-        settingsDoc["location"] = location;
-        settingsDoc["brightness"] = 100;
-        settingsDoc["sensorDelay"] = sensorDelayMs;
-        settingsDoc["bagDetectionDelay"] = ::bagDetectionDelay;
-        settingsDoc["minBagInterval"] = ::minBagInterval;
-        settingsDoc["autoReset"] = ::autoReset;
-        settingsDoc["relayDelayAfterComplete"] = ::relayDelayAfterComplete;
-        settingsDoc["bagTimeMultiplier"] = ::bagTimeMultiplier;
-        
-        File file = LittleFS.open("/settings.json", "w");
-        if (file) {
-          serializeJson(settingsDoc, file);
-          file.close();
-          Serial.println("MQTT: Settings saved to file");
-        }
+        saveSettingsToFile();
+        Serial.println("MQTT: Settings saved to file");
       }
       
       // Legacy targets
@@ -310,7 +313,7 @@ void publishStatusMQTT() {
   int sensorReading = digitalRead(SENSOR_PIN);
   doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
   doc["sensorBlocked"] = isSensorBlocked(sensorReading);
-  doc["sensorActiveLevel"] = "LOW";
+  doc["sensorActiveLevel"] = sensorLevelName(countSensorActiveLevel);
   if (isMeasuringSensor && sensorActiveStartTime > 0) {
     doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
@@ -379,12 +382,17 @@ void publishSensorData() {
   doc["lastTrigger"] = millis();
   int sensorReading = digitalRead(SENSOR_PIN);
   doc["sensorState"] = isSensorBlocked(sensorReading) ? "DETECTED" : "CLEAR";
-  doc["triggerState"] = digitalRead(TRIGGER_SENSOR_PIN) == LOW ? "DETECTED" : "CLEAR";
+  int triggerReading = digitalRead(TRIGGER_SENSOR_PIN);
+  doc["triggerState"] = isTriggerSensorBlocked(triggerReading) ? "DETECTED" : "CLEAR";
+  doc["triggerCurrentState"] = sensorRawStateName(triggerReading);
+  doc["triggerActiveLevel"] = sensorLevelName(currentMode == "input" ? inputSensorActiveLevel : outputSensorActiveLevel);
+  doc["inputSensorActiveLevel"] = sensorLevelName(inputSensorActiveLevel);
+  doc["outputSensorActiveLevel"] = sensorLevelName(outputSensorActiveLevel);
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
   doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
   doc["sensorBlocked"] = isSensorBlocked(sensorReading);
-  doc["sensorActiveLevel"] = "LOW";
+  doc["sensorActiveLevel"] = sensorLevelName(countSensorActiveLevel);
   if (isMeasuringSensor && sensorActiveStartTime > 0) {
     doc["currentMeasuringTime"] = millis() - sensorActiveStartTime;
   }
@@ -408,7 +416,7 @@ void updateSensorTimingMeasurement() {
   if (isSensorBlocked(currentTimingState)) {
     sensorActiveStartTime = millis();
     isMeasuringSensor = true;
-    Serial.println("📏 BẮT ĐẦU đo thời gian sensor LOW (có vật chắn)");
+    Serial.println("📏 BẮT ĐẦU đo thời gian sensor " + String(sensorLevelName(countSensorActiveLevel)) + " (có vật chắn)");
   } else {
     if (isMeasuringSensor && sensorActiveStartTime > 0) {
       unsigned long measuredDuration = millis() - sensorActiveStartTime;

@@ -13,6 +13,15 @@ void updateDisplay() {
     showConnectingDisplay();
     return;
   }
+
+  if (showNetworkIp && millis() < showNetworkIpUntil) {
+    showNetworkIpDisplay();
+    return;
+  }
+
+  if (showNetworkIp && millis() >= showNetworkIpUntil) {
+    showNetworkIp = false;
+  }
   
   if (isLimitReached && isBlinking && (blinkCount % 2 == 1)) {
     dma_display->fillScreen(myWHITE);
@@ -209,17 +218,43 @@ void showConnectingDisplay() {
   }
 }
 
+//----------------------------------------Network IP Display Function
+void showNetworkIpDisplay() {
+  if (!dma_display) {
+    Serial.println("dma_display is null!");
+    return;
+  }
+
+  dma_display->clearScreen();
+  dma_display->setTextSize(1);
+  dma_display->setTextColor(myYELLOW);
+  dma_display->setCursor(1, 3);
+  dma_display->print("IP THIET BI");
+
+  dma_display->setTextColor(myCYAN);
+  dma_display->setCursor(1, 17);
+  dma_display->print(networkIpText.length() > 0 ? networkIpText : "UNKNOWN");
+}
+
 //----------------------------------------Set System Connected
 void setSystemConnected() {
   if (!systemConnected) {
     systemConnected = true;
     showConnectingAnimation = false;
+    showNetworkIp = true;
+    showNetworkIpUntil = millis() + 5000;
+    if (currentNetworkMode == ETHERNET_MODE) {
+      networkIpText = ETH.localIP().toString();
+    } else if (currentNetworkMode == WIFI_STA_MODE) {
+      networkIpText = WiFi.localIP().toString();
+    } else {
+      networkIpText = WiFi.softAPIP().toString();
+    }
     needUpdate = true;  // Trigger display update to normal layout
     
-    Serial.println("System fully connected");
+    Serial.println("System fully connected. Showing IP on LED: " + networkIpText);
     
     // Cập nhật display ngay
     updateDisplay();
   }
 }
-

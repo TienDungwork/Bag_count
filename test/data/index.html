@@ -562,6 +562,24 @@
                 <input type="number" id="bagTimeMultiplier" value="25" min="1" max="100">
                 <small>Tỷ lệ % thời gian sai số (1-100%)</small>
               </div>
+
+              <div class="sensor-level-config">
+                <h5 class="sensor-timing-title"><i class="fas fa-exchange-alt"></i> Đảo mức cảm biến</h5>
+                <div class="sensor-level-grid">
+                  <div class="sensor-level-row">
+                    <span>Cảm biến xuất</span>
+                    <button type="button" id="outputSensorLevelBtn" class="sensor-level-btn" onclick="toggleSensorLevel('output')">LOW</button>
+                  </div>
+                  <div class="sensor-level-row">
+                    <span>Cảm biến đếm</span>
+                    <button type="button" id="countSensorLevelBtn" class="sensor-level-btn" onclick="toggleSensorLevel('count')">LOW</button>
+                  </div>
+                  <div class="sensor-level-row">
+                    <span>Cảm biến nhập</span>
+                    <button type="button" id="inputSensorLevelBtn" class="sensor-level-btn" onclick="toggleSensorLevel('input')">LOW</button>
+                  </div>
+                </div>
+              </div>
               
               <!-- Weight-based Detection Delay Configuration -->
               <div id="weightBasedDelayConfig" class="weight-based-delay-config" style="display: block;">
