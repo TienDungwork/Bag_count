@@ -233,6 +233,8 @@ struct CounterState {
   int outputTriggerState = HIGH;
   unsigned long inputTriggerDebounceTime = 0;
   unsigned long outputTriggerDebounceTime = 0;
+  bool inputTriggerBlockedState = false;
+  bool outputTriggerBlockedState = false;
   bool isCountingEnabled = false;
   bool isTriggerEnabled = false;
   bool isCounting = false;
@@ -419,6 +421,8 @@ static auto& lastOutputTriggerState = app.counter.lastOutputTriggerState;
 static auto& outputTriggerState = app.counter.outputTriggerState;
 static auto& inputTriggerDebounceTime = app.counter.inputTriggerDebounceTime;
 static auto& outputTriggerDebounceTime = app.counter.outputTriggerDebounceTime;
+static auto& inputTriggerBlockedState = app.counter.inputTriggerBlockedState;
+static auto& outputTriggerBlockedState = app.counter.outputTriggerBlockedState;
 static auto& isCountingEnabled = app.counter.isCountingEnabled;
 static auto& isTriggerEnabled = app.counter.isTriggerEnabled;
 static auto& isCounting = app.counter.isCounting;

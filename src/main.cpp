@@ -88,6 +88,17 @@ void setup() {
   lastTriggerState = triggerState;
   outputTriggerState = digitalRead(OUTPUT_TRIGGER_SENSOR_PIN);
   lastOutputTriggerState = outputTriggerState;
+  bool initialInputTriggerBlocked = isInputTriggerBlocked(triggerState);
+  bool initialOutputTriggerBlocked = isOutputTriggerBlocked(outputTriggerState);
+  inputTriggerBlockedState = false;
+  outputTriggerBlockedState = false;
+  Serial.println("Trigger sensors initialized:");
+  Serial.println("  - GPIO4 input trigger: " + String(sensorRawStateName(triggerState)) +
+                 ", active=" + String(sensorLevelName(inputSensorActiveLevel)) +
+                 ", blocked=" + String(initialInputTriggerBlocked ? "true" : "false"));
+  Serial.println("  - GPIO39 output trigger: " + String(sensorRawStateName(outputTriggerState)) +
+                 ", active=" + String(sensorLevelName(outputSensorActiveLevel)) +
+                 ", blocked=" + String(initialOutputTriggerBlocked ? "true" : "false"));
   if (isSensorBlocked(lastTimingSensorState)) {
     sensorActiveStartTime = millis();
     isMeasuringSensor = true;
@@ -369,11 +380,12 @@ void loop() {
     }
     
     if ((millis() - inputTriggerDebounceTime) > debounceDelay) {
-      if (inputTriggerReading != triggerState ||
-          (isInputTriggerBlocked(inputTriggerReading) && (!isCountingEnabled || currentMode != "input"))) {
+      bool inputBlocked = isInputTriggerBlocked(inputTriggerReading);
+      if (inputTriggerReading != triggerState || inputBlocked != inputTriggerBlockedState) {
         triggerState = inputTriggerReading;
+        inputTriggerBlockedState = inputBlocked;
 
-        if (isInputTriggerBlocked(triggerState)) {  // Khi phát hiện vật thể ở chiều nhập
+        if (inputBlocked) {  // Khi phát hiện vật thể ở chiều nhập
           if (currentMode != "input") {
             currentMode = "input";
             needUpdate = true;
@@ -399,11 +411,12 @@ void loop() {
     }
 
     if ((millis() - outputTriggerDebounceTime) > debounceDelay) {
-      if (outputTriggerReading != outputTriggerState ||
-          (isOutputTriggerBlocked(outputTriggerReading) && (!isCountingEnabled || currentMode != "output"))) {
+      bool outputBlocked = isOutputTriggerBlocked(outputTriggerReading);
+      if (outputTriggerReading != outputTriggerState || outputBlocked != outputTriggerBlockedState) {
         outputTriggerState = outputTriggerReading;
+        outputTriggerBlockedState = outputBlocked;
 
-        if (isOutputTriggerBlocked(outputTriggerState)) {  // Khi phát hiện vật thể ở chiều xuất
+        if (outputBlocked) {  // Khi phát hiện vật thể ở chiều xuất
           if (currentMode != "output") {
             currentMode = "output";
             needUpdate = true;
