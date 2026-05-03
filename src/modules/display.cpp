@@ -310,10 +310,6 @@ void updateDisplay() {
     modeLabel = "NHẬP:";
   }
   drawVietnameseText(1, 22, modeLabel, myCYAN, 1);
-  dma_display->setTextSize(1);
-  dma_display->setTextColor(myCYAN);
-  dma_display->setCursor(38, 22);
-  dma_display->print(String(targetCount));
   
   needUpdate = false;
 }
