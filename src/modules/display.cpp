@@ -159,14 +159,20 @@ void drawVietnameseText(int x, int y, const String& text, uint16_t color, uint8_
     VietnameseGlyph glyph = glyphFromUtf8(text, i);
     dma_display->setCursor(cursorX, y);
     dma_display->print(glyph.base);
+    dma_display->setCursor(cursorX + 1, y);
+    dma_display->print(glyph.base);
 
     if (glyph.stroke) {
       dma_display->drawLine(cursorX + 1, y + 4, cursorX + 5, y + 2, color);
+      dma_display->drawLine(cursorX + 2, y + 4, cursorX + 6, y + 2, color);
     }
     drawShapeMark(cursorX, shapeY, glyph.shapeMark, color);
+    drawShapeMark(cursorX + 1, shapeY, glyph.shapeMark, color);
     drawAccentMark(cursorX, topY, glyph.topMark, color);
+    drawAccentMark(cursorX + 1, topY, glyph.topMark, color);
     if (glyph.dotBelow) {
       dma_display->drawPixel(cursorX + 3, dotY, color);
+      dma_display->drawPixel(cursorX + 4, dotY, color);
     }
 
     cursorX += charWidth;
