@@ -389,10 +389,10 @@ void updateDisplay() {
     if (utf8CharCount(displayText) > maxCodeLen) {
       String line1 = utf8SliceChars(displayText, 0, maxCodeLen);
       String line2 = utf8SliceChars(displayText, maxCodeLen, maxCodeLen);
-      drawVietnameseText(1, 6, line1, myYELLOW, 1);
+      drawVietnameseText(1, 5, line1, myYELLOW, 1);
       drawVietnameseText(1, 15, line2, myYELLOW, 1);
     } else {
-      drawVietnameseText(1, 6, displayText, myYELLOW, 1);
+      drawVietnameseText(1, 5, displayText, myYELLOW, 1);
     }
   }
 
@@ -424,7 +424,7 @@ void updateDisplay() {
   drawVietnameseText(1, 21, modeLabel, myCYAN, 1.5f);
   dma_display->setTextSize(1);
   dma_display->setTextColor(myCYAN);
-  dma_display->setCursor(50, 22);
+  dma_display->setCursor(50, 21);
   dma_display->print(String(targetCount));
   
   needUpdate = false;
