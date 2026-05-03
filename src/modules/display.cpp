@@ -60,17 +60,46 @@ static void drawShapeMark(int x, int y, char mark, uint16_t color) {
 static bool glyphColumns(char c, uint8_t out[5]) {
   switch (c) {
     case ' ': out[0] = 0x00; out[1] = 0x00; out[2] = 0x00; out[3] = 0x00; out[4] = 0x00; return true;
+    case '-': out[0] = 0x08; out[1] = 0x08; out[2] = 0x08; out[3] = 0x08; out[4] = 0x08; return true;
+    case '.': out[0] = 0x00; out[1] = 0x00; out[2] = 0x60; out[3] = 0x60; out[4] = 0x00; return true;
+    case '/': out[0] = 0x20; out[1] = 0x10; out[2] = 0x08; out[3] = 0x04; out[4] = 0x02; return true;
     case ':': out[0] = 0x00; out[1] = 0x00; out[2] = 0x14; out[3] = 0x00; out[4] = 0x00; return true;
+    case '0': out[0] = 0x3E; out[1] = 0x51; out[2] = 0x49; out[3] = 0x45; out[4] = 0x3E; return true;
+    case '1': out[0] = 0x00; out[1] = 0x42; out[2] = 0x7F; out[3] = 0x40; out[4] = 0x00; return true;
+    case '2': out[0] = 0x72; out[1] = 0x49; out[2] = 0x49; out[3] = 0x49; out[4] = 0x46; return true;
+    case '3': out[0] = 0x21; out[1] = 0x41; out[2] = 0x49; out[3] = 0x4D; out[4] = 0x33; return true;
+    case '4': out[0] = 0x18; out[1] = 0x14; out[2] = 0x12; out[3] = 0x7F; out[4] = 0x10; return true;
+    case '5': out[0] = 0x27; out[1] = 0x45; out[2] = 0x45; out[3] = 0x45; out[4] = 0x39; return true;
+    case '6': out[0] = 0x3C; out[1] = 0x4A; out[2] = 0x49; out[3] = 0x49; out[4] = 0x31; return true;
+    case '7': out[0] = 0x41; out[1] = 0x21; out[2] = 0x11; out[3] = 0x09; out[4] = 0x07; return true;
+    case '8': out[0] = 0x36; out[1] = 0x49; out[2] = 0x49; out[3] = 0x49; out[4] = 0x36; return true;
+    case '9': out[0] = 0x46; out[1] = 0x49; out[2] = 0x49; out[3] = 0x29; out[4] = 0x1E; return true;
     case 'A': out[0] = 0x7C; out[1] = 0x12; out[2] = 0x11; out[3] = 0x12; out[4] = 0x7C; return true;
+    case 'B': out[0] = 0x7F; out[1] = 0x49; out[2] = 0x49; out[3] = 0x49; out[4] = 0x36; return true;
     case 'C': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x22; return true;
     case 'D': out[0] = 0x7F; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x3E; return true;
+    case 'E': out[0] = 0x7F; out[1] = 0x49; out[2] = 0x49; out[3] = 0x49; out[4] = 0x41; return true;
+    case 'F': out[0] = 0x7F; out[1] = 0x09; out[2] = 0x09; out[3] = 0x09; out[4] = 0x01; return true;
+    case 'G': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x41; out[3] = 0x51; out[4] = 0x73; return true;
     case 'H': out[0] = 0x7F; out[1] = 0x08; out[2] = 0x08; out[3] = 0x08; out[4] = 0x7F; return true;
+    case 'I': out[0] = 0x00; out[1] = 0x41; out[2] = 0x7F; out[3] = 0x41; out[4] = 0x00; return true;
+    case 'J': out[0] = 0x20; out[1] = 0x40; out[2] = 0x41; out[3] = 0x3F; out[4] = 0x01; return true;
+    case 'K': out[0] = 0x7F; out[1] = 0x08; out[2] = 0x14; out[3] = 0x22; out[4] = 0x41; return true;
+    case 'L': out[0] = 0x7F; out[1] = 0x40; out[2] = 0x40; out[3] = 0x40; out[4] = 0x40; return true;
+    case 'M': out[0] = 0x7F; out[1] = 0x02; out[2] = 0x1C; out[3] = 0x02; out[4] = 0x7F; return true;
     case 'N': out[0] = 0x7F; out[1] = 0x04; out[2] = 0x08; out[3] = 0x10; out[4] = 0x7F; return true;
     case 'O': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x41; out[3] = 0x41; out[4] = 0x3E; return true;
     case 'P': out[0] = 0x7F; out[1] = 0x09; out[2] = 0x09; out[3] = 0x09; out[4] = 0x06; return true;
+    case 'Q': out[0] = 0x3E; out[1] = 0x41; out[2] = 0x51; out[3] = 0x21; out[4] = 0x5E; return true;
+    case 'R': out[0] = 0x7F; out[1] = 0x09; out[2] = 0x19; out[3] = 0x29; out[4] = 0x46; return true;
+    case 'S': out[0] = 0x26; out[1] = 0x49; out[2] = 0x49; out[3] = 0x49; out[4] = 0x32; return true;
     case 'T': out[0] = 0x03; out[1] = 0x01; out[2] = 0x7F; out[3] = 0x01; out[4] = 0x03; return true;
     case 'U': out[0] = 0x3F; out[1] = 0x40; out[2] = 0x40; out[3] = 0x40; out[4] = 0x3F; return true;
+    case 'V': out[0] = 0x1F; out[1] = 0x20; out[2] = 0x40; out[3] = 0x20; out[4] = 0x1F; return true;
+    case 'W': out[0] = 0x3F; out[1] = 0x40; out[2] = 0x38; out[3] = 0x40; out[4] = 0x3F; return true;
     case 'X': out[0] = 0x63; out[1] = 0x14; out[2] = 0x08; out[3] = 0x14; out[4] = 0x63; return true;
+    case 'Y': out[0] = 0x03; out[1] = 0x04; out[2] = 0x78; out[3] = 0x04; out[4] = 0x03; return true;
+    case 'Z': out[0] = 0x61; out[1] = 0x59; out[2] = 0x49; out[3] = 0x4D; out[4] = 0x43; return true;
   }
   return false;
 }
@@ -385,14 +414,14 @@ void updateDisplay() {
   if (noOrder) {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
-    int maxCodeLen = 10;
+    int maxCodeLen = 7;
     if (utf8CharCount(displayText) > maxCodeLen) {
       String line1 = utf8SliceChars(displayText, 0, maxCodeLen);
       String line2 = utf8SliceChars(displayText, maxCodeLen, maxCodeLen);
-      drawVietnameseText(1, 5, line1, myYELLOW, 1);
-      drawVietnameseText(1, 15, line2, myYELLOW, 1);
+      drawVietnameseText(1, 5, line1, myYELLOW, 1.5f);
+      drawVietnameseText(1, 16, line2, myYELLOW, 1.5f);
     } else {
-      drawVietnameseText(1, 5, displayText, myYELLOW, 1);
+      drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
     }
   }
 
@@ -422,10 +451,7 @@ void updateDisplay() {
     modeLabel = "NHẬP:";
   }
   drawVietnameseText(1, 21, modeLabel, myCYAN, 1.5f);
-  dma_display->setTextSize(1);
-  dma_display->setTextColor(myCYAN);
-  dma_display->setCursor(50, 21);
-  dma_display->print(String(targetCount));
+  drawVietnameseText(50, 21, String(targetCount), myCYAN, 1.5f);
   
   needUpdate = false;
 }
