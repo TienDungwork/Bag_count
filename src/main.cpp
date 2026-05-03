@@ -370,6 +370,16 @@ void loop() {
     if ((millis() - lastDebounceTime) > debounceDelay) {
       if (triggerReading != triggerState) {
         triggerState = triggerReading;
+
+        if (inputSensorActiveLevel != outputSensorActiveLevel) {
+          String detectedMode = triggerState == inputSensorActiveLevel ? "input" : "output";
+          if (currentMode != detectedMode) {
+            currentMode = detectedMode;
+            needUpdate = true;
+            Serial.println("TRIGGER SENSOR: Auto direction mode -> " + currentMode);
+          }
+        }
+
         if (isTriggerSensorBlocked(triggerState)) {  // Khi phát hiện vật thể
           isCountingEnabled = true;  // Kích hoạt cảm biến đếm
           Serial.println("TRIGGER SENSOR: Phat hien vat the -> Kich hoat dem! Active=" + String(sensorLevelName(currentMode == "input" ? inputSensorActiveLevel : outputSensorActiveLevel)));
