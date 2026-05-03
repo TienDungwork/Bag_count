@@ -421,11 +421,7 @@ void updateDisplay() {
   } else {
     modeLabel = "NHẬP:";
   }
-  drawVietnameseText(1, 19, modeLabel, myCYAN, 1.5f);
-  dma_display->setTextSize(1);
-  dma_display->setTextColor(myCYAN);
-  dma_display->setCursor(50, 22);
-  dma_display->print(String(targetCount));
+  drawVietnameseText(1, 21, modeLabel, myCYAN, 1.5f);
   
   needUpdate = false;
 }
