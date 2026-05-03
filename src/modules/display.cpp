@@ -265,7 +265,7 @@ void updateDisplay() {
   }
 
   if (noOrder) {
-    drawVietnameseText(1, 8, displayText, myYELLOW, 1);
+    drawVietnameseText(1, 6, displayText, myYELLOW, 1);
   } else {
     int maxCodeLen = 10;
     if (utf8CharCount(displayText) > maxCodeLen) {
