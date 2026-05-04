@@ -237,7 +237,7 @@ void setupRealtimeTransport() {
 
   DynamicJsonDocument readyDoc(256);
   readyDoc["source"] = "SYSTEM";
-  readyDoc["action"] = "MQTT_READY";
+  readyDoc["action"] = "REALTIME_READY";
   readyDoc["status"] = "ESP32_ONLINE";
   readyDoc["timestamp"] = millis();
   String readyMessage;

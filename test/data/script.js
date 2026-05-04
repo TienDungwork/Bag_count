@@ -50,7 +50,7 @@ function normalizeOrderIdentity(order) {
 let realtimeWs = null;
 let realtimeConnected = false;
 let currentDeviceStatus = {};
-let lastMqttUpdate = 0;
+let lastRealtimeUpdate = 0;
 let realtimeReconnectTimer = null;
 const REALTIME_WS_PORT = 81;
 const REALTIME_WS_PATH = '/ws';
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Initialize realtime client AFTER settings are loaded
   setTimeout(() => {
-    initMQTTClient();
+    initRealtimeWebSocket();
   }, 1000);
   
   // Start background sync
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   console.log('Application initialized successfully');
-  // showNotification('Ứng dụng đã khởi tạo (MQTT Real-time mode)', 'success');
+  // showNotification('Ứng dụng đã khởi tạo (Realtime WebSocket mode)', 'success');
 });
 
 // Chặn đổi số ngoài ý muốn khi lăn chuột trên input number
@@ -798,36 +798,42 @@ async function resetAllDataToDefault() {
 }
 
 // Realtime WebSocket setup
-function initMQTTClient() {
+function initRealtimeWebSocket() {
   try {
     if (realtimeReconnectTimer) {
       clearTimeout(realtimeReconnectTimer);
       realtimeReconnectTimer = null;
     }
 
-    if (realtimeWs && (realtimeWs.readyState === WebSocket.OPEN || realtimeWs.readyState === WebSocket.CONNECTING)) {
-      realtimeWs.close();
+    if (realtimeWs) {
+      const state = realtimeWs.readyState;
+      if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+        return;
+      }
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
 
     console.log('Connecting realtime WebSocket:', wsUrl);
-    realtimeWs = new WebSocket(wsUrl);
+    const socket = new WebSocket(wsUrl);
+    realtimeWs = socket;
 
-    realtimeWs.onopen = function() {
+    socket.onopen = function() {
+      if (socket !== realtimeWs) return;
       console.log('Realtime WebSocket connected');
       realtimeConnected = true;
-      updateMQTTStatus(true);
+      updateRealtimeStatus(true);
       if (statusPollingInterval) {
         clearInterval(statusPollingInterval);
         statusPollingInterval = null;
       }
-      subscribeMQTTTopics();
+      subscribeRealtimeTopics();
       startDeviceMonitoring();
     };
 
-    realtimeWs.onmessage = function(event) {
+    socket.onmessage = function(event) {
+      if (socket !== realtimeWs) return;
       try {
         const envelope = JSON.parse(event.data);
         if (!envelope.topic) {
@@ -850,7 +856,7 @@ function initMQTTClient() {
           });
         }
 
-        handleMQTTMessage(envelope.topic, data).catch(error => {
+        handleRealtimeMessage(envelope.topic, data).catch(error => {
           console.error('Realtime message handler error:', error);
         });
       } catch (error) {
@@ -858,19 +864,22 @@ function initMQTTClient() {
       }
     };
 
-    realtimeWs.onerror = function(error) {
+    socket.onerror = function(error) {
+      if (socket !== realtimeWs) return;
       console.error('Realtime WebSocket error:', error);
     };
 
-    realtimeWs.onclose = function() {
+    socket.onclose = function() {
+      if (socket !== realtimeWs) return;
       console.log('Realtime WebSocket disconnected');
+      realtimeWs = null;
       realtimeConnected = false;
-      updateMQTTStatus(false);
+      updateRealtimeStatus(false);
 
       if (!realtimeReconnectTimer) {
         realtimeReconnectTimer = setTimeout(() => {
           realtimeReconnectTimer = null;
-          initMQTTClient();
+          initRealtimeWebSocket();
         }, 2000);
       }
     };
@@ -879,14 +888,14 @@ function initMQTTClient() {
   }
 }
 
-function subscribeMQTTTopics() {
+function subscribeRealtimeTopics() {
   if (!realtimeConnected) return;
   console.log('Realtime WebSocket subscribed to built-in device stream');
 }
 
-// Handle MQTT Messages
-async function handleMQTTMessage(topic, data) {
-  lastMqttUpdate = Date.now();
+// Handle realtime WebSocket messages
+async function handleRealtimeMessage(topic, data) {
+  lastRealtimeUpdate = Date.now();
   // Có bất kỳ gói realtime nào cũng coi là thiết bị còn online
   lastHeartbeat = Date.now();
   if (!deviceConnected) {
@@ -923,11 +932,11 @@ async function handleMQTTMessage(topic, data) {
       break;
       
     default:
-      console.log('Unknown MQTT topic:', topic);
+      console.log('Unknown realtime topic:', topic);
   }
 }
 
-// MQTT Message Handlers  
+// Realtime message handlers
 async function updateDeviceStatus(data) {
   currentDeviceStatus = { ...currentDeviceStatus, ...data };
   
@@ -1040,10 +1049,10 @@ async function handleCountUpdate(data) {
   handleCountUpdateRunning = true;
   
   try {
-    console.log('MQTT Real-time count:', data.count, 'type:', data.type, 'productCode:', data.productCode, 'progress:', data.progress + '%');
+    console.log('Realtime count:', data.count, 'type:', data.type, 'productCode:', data.productCode, 'progress:', data.progress + '%');
     console.log('countingState.isActive:', countingState.isActive);
 
-    // MQTT-ONLY REAL-TIME COUNT UPDATE - No API fallback to prevent overwrites
+    // Realtime-only count update - no API fallback to prevent overwrites
     // Ưu tiên có định danh sản phẩm; nếu thiếu thì chỉ chấp nhận khi có đúng 1 đơn đang counting
     if (!data.type && !data.productCode) {
       const activeBatch = orderBatches.find(b => b.isActive);
@@ -1240,7 +1249,7 @@ async function handleDeviceAlert(data) {
       
       // 🛑 Gửi STOP command để ESP32 về trạng thái chờ
       console.log('🛑 Sending STOP command after batch completion');
-      await sendMQTTCommand('STOP');
+      await sendRealtimeCommand('STOP');
       
       // Update button states về reset
       updateButtonStates('reset');
@@ -1275,6 +1284,12 @@ async function handleDeviceAlert(data) {
 
 function updateSensorStatus(data) {
   //console.log('Sensor update:', data);
+  const modeFromDevice = data.setMode || data.currentMode;
+  if (modeFromDevice && modeFromDevice !== currentMode) {
+    console.log('Mode update from sensor:', currentMode, '→', modeFromDevice);
+    applyModeToUI(modeFromDevice);
+  }
+
   if (data.lastMeasuredTime === undefined && data.currentMeasuringTime === undefined) {
     return;
   }
@@ -1319,7 +1334,7 @@ function updateHeartbeat(data) {
 function checkHeartbeatTimeout() {
   const now = Date.now();
   const timeSinceLastHeartbeat = now - lastHeartbeat;
-  const timeSinceLastRealtime = now - (lastMqttUpdate || 0);
+  const timeSinceLastRealtime = now - (lastRealtimeUpdate || 0);
   
   // Nếu vừa có realtime data (count/status/alert...) thì không coi là mất kết nối
   if (timeSinceLastRealtime <= HEARTBEAT_TIMEOUT) {
@@ -1406,12 +1421,13 @@ function startDeviceMonitoring() {
   console.log('Device monitoring started - checking every 10 seconds');
 }
 
-// Handle IR Command Messages from MQTT  
+// Handle IR command messages from realtime WebSocket
 async function handleIRCommandMessage(data) {
   console.log('IR Command received:', data);
   
-  // Xử lý MQTT_READY signal từ ESP32
-  if (data.action === 'MQTT_READY' || data.command === 'MQTT_READY') {
+  // Xử lý tín hiệu realtime ready từ ESP32
+  if (data.action === 'REALTIME_READY' || data.command === 'REALTIME_READY' ||
+      data.action === 'MQTT_READY' || data.command === 'MQTT_READY') {
     return;
   }
   
@@ -1422,17 +1438,17 @@ async function handleIRCommandMessage(data) {
   switch(command) {
     case 'START':
       // console.log('IR Remote START - executing startCounting()');
-      await startCountingMQTT();
+      await startCountingRealtime();
       break;
       
     case 'PAUSE':
       // console.log('IR Remote PAUSE - executing pauseCounting()');
-      await pauseCountingMQTT();
+      await pauseCountingRealtime();
       break;
       
     case 'RESET':
       // console.log('IR Remote RESET - executing resetCounting()');
-      await resetCountingMQTT();
+      await resetCountingRealtime();
       break;
       
     default:
@@ -1537,8 +1553,8 @@ function updateUIForReset() {
   //owNotification('Remote: Reset hệ thống', 'info');
 }
 
-// MQTT Command Functions
-function sendMQTTCommand(topic, payload) {
+// Realtime WebSocket command functions
+function sendRealtimeCommand(topic, payload) {
   console.log(`Realtime Debug - Sending command to: ${topic}`);
   console.log(`Realtime connected: ${realtimeConnected}`);
   console.log(`Realtime client exists: ${!!realtimeWs}`);
@@ -1563,28 +1579,28 @@ function sendMQTTCommand(topic, payload) {
   }
 }
 
-// MQTT Command Functions for IR Remote and Counting Control
-function startCountingMQTT() {
-  console.log('Sending START command via MQTT');
-  return sendMQTTCommand('bagcounter/cmd/start', {
+// Realtime command functions for IR Remote and Counting Control
+function startCountingRealtime() {
+  console.log('Sending START command via realtime WebSocket');
+  return sendRealtimeCommand('bagcounter/cmd/start', {
     action: 'START',
     timestamp: Date.now(),
     source: 'web'
   });
 }
 
-function pauseCountingMQTT() {
-  console.log('Sending PAUSE command via MQTT');
-  return sendMQTTCommand('bagcounter/cmd/pause', {
+function pauseCountingRealtime() {
+  console.log('Sending PAUSE command via realtime WebSocket');
+  return sendRealtimeCommand('bagcounter/cmd/pause', {
     action: 'PAUSE',
     timestamp: Date.now(),
     source: 'web'
   });
 }
 
-function resetCountingMQTT() {
-  console.log('Sending RESET command via MQTT');
-  return sendMQTTCommand('bagcounter/cmd/reset', {
+function resetCountingRealtime() {
+  console.log('Sending RESET command via realtime WebSocket');
+  return sendRealtimeCommand('bagcounter/cmd/reset', {
     action: 'RESET',
     timestamp: Date.now(),
     source: 'web'
@@ -1592,7 +1608,7 @@ function resetCountingMQTT() {
 }
 
 function sendCurrentOrderWS(orderData) {
-  return sendMQTTCommand('bagcounter/ws/current_order', {
+  return sendRealtimeCommand('bagcounter/ws/current_order', {
     type: orderData.productName || '',
     productCode: orderData.productCode || '',
     orderCode: orderData.orderCode || '',
@@ -1606,8 +1622,8 @@ function sendCurrentOrderWS(orderData) {
   });
 }
 
-function updateConfigMQTT(configData) {
-  return sendMQTTCommand('bagcounter/config/update', {
+function updateConfigRealtime(configData) {
+  return sendRealtimeCommand('bagcounter/config/update', {
     ...configData,
     timestamp: Date.now(),
     source: 'web'
@@ -1685,7 +1701,7 @@ async function loadManagementData() {
   }
 }
 
-// Fallback to old API polling if MQTT fails - DISABLED to prevent data overwrites
+// Fallback to old API polling if realtime WebSocket fails
 function startStatusPollingFallback() {
   console.log('Realtime WebSocket unavailable, switching to API polling fallback');
   showNotification('Realtime WebSocket mất kết nối, chuyển sang polling dự phòng', 'warning');
@@ -1693,7 +1709,7 @@ function startStatusPollingFallback() {
 }
 
 // UI Update Functions
-function updateMQTTStatus(connected) {
+function updateRealtimeStatus(connected) {
   const statusElement = document.getElementById('mqttStatus');
   if (statusElement) {
     statusElement.textContent = connected ? 'Realtime Connected' : 'Polling Mode';
@@ -2363,7 +2379,7 @@ function switchBatch() {
       
       console.log('Sending STOP command when switching to new batch');
       try {
-        sendMQTTCommand('bagcounter/cmd/stop', {
+        sendRealtimeCommand('bagcounter/cmd/stop', {
           action: 'STOP',
           timestamp: Date.now(),
           source: 'web'
@@ -2889,7 +2905,7 @@ function updateButtonStates(state) {
 }
 
 // Counting Control (Updated)
-// Hybrid Functions (MQTT preferred, API fallback)
+// Hybrid functions (realtime WebSocket preferred, API fallback)
 async function startCounting() {
   console.log('Starting counting...');
   console.log('Current orderBatches:', orderBatches);
@@ -3073,16 +3089,16 @@ async function startCounting() {
       });
     }
 
-    // Try MQTT first for real-time commands
-    if (realtimeConnected && startCountingMQTT()) {
-      console.log('START command sent via MQTT');
+    // Try realtime WebSocket first for commands
+    if (realtimeConnected && startCountingRealtime()) {
+      console.log('START command sent via realtime WebSocket');
       
-      // Send batch info via MQTT as well
-      sendMQTTCommand('bagcounter/cmd/batch_info', batchInfo);
+      // Send batch info via realtime WebSocket as well
+      sendRealtimeCommand('bagcounter/cmd/batch_info', batchInfo);
       
     } else {
-      // Fallback to API if MQTT not available
-      console.log('MQTT not available, fallback to API...');
+      // Fallback to API if realtime WebSocket is not available
+      console.log('Realtime WebSocket not available, fallback to API...');
       await sendESP32Command('start');
       await sendESP32Command('batch_info', batchInfo);
     }
@@ -3140,12 +3156,12 @@ async function pauseCounting() {
       }
     }
 
-    // Try MQTT first for real-time commands
-    if (realtimeConnected && pauseCountingMQTT()) {
-      console.log('PAUSE command sent via MQTT');
+    // Try realtime WebSocket first for commands
+    if (realtimeConnected && pauseCountingRealtime()) {
+      console.log('PAUSE command sent via realtime WebSocket');
     } else {
-      // Fallback to API if MQTT not available
-      console.log('MQTT not available, fallback to API...');
+      // Fallback to API if realtime WebSocket is not available
+      console.log('Realtime WebSocket not available, fallback to API...');
       await sendESP32Command('pause');
     }
     
@@ -3207,12 +3223,12 @@ async function resetCounting() {
   updateUIForReset();
   
   try {
-    // Try MQTT first for real-time commands
-    if (realtimeConnected && resetCountingMQTT()) {
-      console.log('RESET command sent via MQTT');
+    // Try realtime WebSocket first for commands
+    if (realtimeConnected && resetCountingRealtime()) {
+      console.log('RESET command sent via realtime WebSocket');
     } else {
-      // Fallback to API if MQTT not available
-      console.log('MQTT not available, fallback to API...');
+      // Fallback to API if realtime WebSocket is not available
+      console.log('Realtime WebSocket not available, fallback to API...');
       await sendESP32Command('reset');
     }
     
@@ -4710,7 +4726,7 @@ async function refreshStatusFromDevice(source = 'manual') {
   const data = await getStatus();
   if (!data) return;
 
-  lastMqttUpdate = Date.now();
+  lastRealtimeUpdate = Date.now();
   lastHeartbeat = Date.now();
   deviceConnected = true;
   updateDeviceConnectionStatus(true);
@@ -4725,7 +4741,7 @@ window.addEventListener('focus', () => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     if (!realtimeWs || realtimeWs.readyState === WebSocket.CLOSED || realtimeWs.readyState === WebSocket.CLOSING) {
-      initMQTTClient();
+      initRealtimeWebSocket();
     }
     refreshStatusFromDevice('visibilitychange');
   }
@@ -4740,14 +4756,14 @@ async function updateStatusFromDevice(data) {
     return;
   }
   
-  // Check for IR commands in status when MQTT might not work
+  // Check for IR commands in status when realtime WebSocket might not work
   if (data.lastIRCommand && data.lastIRTimestamp) {
     // Check if this is a new IR command (different timestamp)
     if (!window.lastProcessedIRTimestamp || data.lastIRTimestamp !== window.lastProcessedIRTimestamp) {
       console.log('ESP32→Web: IR ' + data.lastIRCommand + ' (polling)');
       window.lastProcessedIRTimestamp = data.lastIRTimestamp;
       
-      // Process IR command like MQTT
+      // Process IR command like realtime WebSocket
       await handleIRCommandMessage({
         source: "IR_REMOTE",
         action: data.lastIRCommand,
@@ -4952,9 +4968,9 @@ async function updateStatusFromDevice(data) {
               console.log(`GỬI LỆNH CẬP NHẬT TARGET CHO ESP32: ${newTotalTarget}`);
               
               if (realtimeConnected) {
-                console.log(`Sending MQTT command to bagcounter/config/update`);
-                // Gửi lệnh update target qua MQTT
-                const result = sendMQTTCommand('bagcounter/config/update', {
+                console.log(`Sending realtime command to bagcounter/config/update`);
+                // Gửi lệnh update target qua realtime WebSocket
+                const result = sendRealtimeCommand('bagcounter/config/update', {
                   target: newTotalTarget,
                   resetLimit: true,
                   nextOrder: {
@@ -4964,7 +4980,7 @@ async function updateStatusFromDevice(data) {
                     orderCode: nextOrder.orderCode
                   }
                 });
-                console.log(`MQTT command result:`, result);
+                console.log(`Realtime command result:`, result);
               } else {
                 console.log(`Sending API command`);
                 // Gửi qua API
@@ -4990,7 +5006,7 @@ async function updateStatusFromDevice(data) {
             // Gửi lệnh pause đến ESP32 để dừng đếm
             try {
               if (realtimeConnected) {
-                pauseCountingMQTT();
+                pauseCountingRealtime();
               } else {
                 await sendESP32Command('pause');
               }
@@ -5183,14 +5199,14 @@ function saveGeneralSettings() {
   // Gửi đến ESP32 qua API (ưu tiên)
   sendSettingsToESP32();
   
-  // Gửi qua MQTT để sync real-time (backup)
-  sendSettingsViaMQTT();
+  // Gửi qua realtime WebSocket để sync realtime (backup)
+  sendSettingsViaRealtime();
   
   showNotification('Lưu cài đặt thành công', 'success');
 }
 
-// Gửi settings qua MQTT (real-time sync)
-function sendSettingsViaMQTT() {
+// Gửi settings qua realtime WebSocket
+function sendSettingsViaRealtime() {
   if (realtimeConnected && realtimeWs) {
     try {
       const mqttSettings = {
@@ -5207,7 +5223,7 @@ function sendSettingsViaMQTT() {
       };
       
       console.log('Sending settings via realtime WebSocket:', mqttSettings);
-      sendMQTTCommand('bagcounter/config/update', mqttSettings);
+      sendRealtimeCommand('bagcounter/config/update', mqttSettings);
       console.log('Settings sent via realtime WebSocket');
       
     } catch (error) {
@@ -6855,7 +6871,7 @@ window.testMQTTCount = function() {
   console.log('1. Realtime Connection Status:');
   console.log('   Connected:', realtimeConnected);
   console.log('   Client exists:', !!realtimeWs);
-  console.log('   Last MQTT update:', lastMqttUpdate ? new Date(lastMqttUpdate) : 'Never');
+  console.log('   Last realtime update:', lastRealtimeUpdate ? new Date(lastRealtimeUpdate) : 'Never');
   
   // Test 2: Manual count update simulation
   console.log('2. Testing manual count update...');
@@ -6973,7 +6989,7 @@ window.testIRCommand = function() {
     };
     
     console.log(`Simulating IR command: ${command}`);
-    handleMQTTMessage('bagcounter/ir_command', testData);
+    handleRealtimeMessage('bagcounter/ir_command', testData);
     
     commandIndex++;
   }, 2000);
@@ -6984,7 +7000,7 @@ window.debugMQTTConnection = function() {
   console.log('   Connected:', realtimeConnected);
   console.log('   Client exists:', !!realtimeWs);
   console.log('   Client readyState:', realtimeWs ? realtimeWs.readyState : 'N/A');
-  console.log('   Last MQTT update:', lastMqttUpdate ? new Date(lastMqttUpdate) : 'Never');
+  console.log('   Last realtime update:', lastRealtimeUpdate ? new Date(lastRealtimeUpdate) : 'Never');
   
   if (realtimeWs) {
     console.log('   Client details:', {
@@ -7003,7 +7019,7 @@ window.debugMQTTConnection = function() {
     };
     
     console.log('Simulating IR command:', testIRData);
-    handleMQTTMessage('bagcounter/ir_command', testIRData);
+    handleRealtimeMessage('bagcounter/ir_command', testIRData);
     console.log('Manual IR command test completed');
   } else {
     console.log('Realtime client not initialized');

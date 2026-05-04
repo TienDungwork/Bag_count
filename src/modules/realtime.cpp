@@ -16,7 +16,7 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         return;
       }
     }
-    Serial.println("MQTT Command: START from Web");
+    Serial.println("Realtime Command: START from Web");
     handleWebCommand(1); // Start command from web
     
   } else if (topicStr == TOPIC_CMD_PAUSE) {
@@ -29,7 +29,7 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         return;
       }
     }
-    Serial.println("MQTT Command: PAUSE from Web");
+    Serial.println("Realtime Command: PAUSE from Web");
     handleWebCommand(2); // Pause command from web
     
   } else if (topicStr == TOPIC_CMD_RESET) {
@@ -42,7 +42,7 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         return;
       }
     }
-    Serial.println("MQTT Command: RESET from Web");
+    Serial.println("Realtime Command: RESET from Web");
     handleWebCommand(3); // Reset command from web
     
   } else if (topicStr == "bagcounter/ws/current_order") {
@@ -152,12 +152,12 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         // Publish confirmation
         publishStatusMQTT();
         
-        Serial.println("Order selected MQTT: " + orderType + " | orderCode=" + orderCode + " | productCode=" + productCode + " | currentCount=" + String(totalCount));
+        Serial.println("Order selected via realtime: " + orderType + " | orderCode=" + orderCode + " | productCode=" + productCode + " | currentCount=" + String(totalCount));
       }
     }
     
   } else if (topicStr == TOPIC_CONFIG) {
-    Serial.println("MQTT Command: CONFIG UPDATE");
+    Serial.println("Realtime Command: CONFIG UPDATE");
     // Parse JSON config update - ÁP DỤNG SETTINGS TỪNG BỘ PHẬN
     DynamicJsonDocument doc(512);
     if (deserializeJson(doc, message) == DeserializationError::Ok) {
@@ -166,100 +166,100 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
       if (doc.containsKey("brightness")) {
         displayBrightness = 100;
         if (dma_display) dma_display->setBrightness8(255);
-        Serial.println("MQTT: Brightness fixed at 100%");
+        Serial.println("Realtime: Brightness fixed at 100%");
         settingsChanged = true;
       }
       
       if (doc.containsKey("sensorDelay")) {
         sensorDelayMs = doc["sensorDelay"];
         debounceDelay = sensorDelayMs;
-        Serial.println("MQTT: Applied sensorDelay: " + String(sensorDelayMs) + "ms");
+        Serial.println("Realtime: Applied sensorDelay: " + String(sensorDelayMs) + "ms");
         settingsChanged = true;
       }
       
       if (doc.containsKey("bagDetectionDelay")) {
         ::bagDetectionDelay = doc["bagDetectionDelay"];
-        Serial.println("MQTT: Applied bagDetectionDelay: " + String(::bagDetectionDelay) + "ms");
+        Serial.println("Realtime: Applied bagDetectionDelay: " + String(::bagDetectionDelay) + "ms");
         settingsChanged = true;
       }
       
       if (doc.containsKey("bagTimeMultiplier")) {
         ::bagTimeMultiplier = doc["bagTimeMultiplier"];
-        Serial.println("MQTT: Applied bagTimeMultiplier: " + String(::bagTimeMultiplier) + "%");
+        Serial.println("Realtime: Applied bagTimeMultiplier: " + String(::bagTimeMultiplier) + "%");
         settingsChanged = true;
       }
       
       if (doc.containsKey("minBagInterval")) {
         ::minBagInterval = doc["minBagInterval"];
-        Serial.println("MQTT: Applied minBagInterval: " + String(::minBagInterval) + "ms");
+        Serial.println("Realtime: Applied minBagInterval: " + String(::minBagInterval) + "ms");
         settingsChanged = true;
       }
       
       if (doc.containsKey("autoReset")) {
         ::autoReset = doc["autoReset"];
-        Serial.println("MQTT: Applied autoReset: " + String(::autoReset ? "true" : "false"));
+        Serial.println("Realtime: Applied autoReset: " + String(::autoReset ? "true" : "false"));
         settingsChanged = true;
       }
       
       if (doc.containsKey("relayDelayAfterComplete")) {
         ::relayDelayAfterComplete = doc["relayDelayAfterComplete"];
-        Serial.println("MQTT: Applied relayDelayAfterComplete: " + String(::relayDelayAfterComplete) + "ms");
+        Serial.println("Realtime: Applied relayDelayAfterComplete: " + String(::relayDelayAfterComplete) + "ms");
         settingsChanged = true;
       }
       
       if (doc.containsKey("conveyorName")) {
         conveyorName = doc["conveyorName"].as<String>();
-        Serial.println("MQTT: Applied conveyorName: " + conveyorName);
+        Serial.println("Realtime: Applied conveyorName: " + conveyorName);
         settingsChanged = true;
       }
       
       if (doc.containsKey("location")) {
         location = doc["location"].as<String>();
-        Serial.println("MQTT: Applied location: " + location);
+        Serial.println("Realtime: Applied location: " + location);
         settingsChanged = true;
       }
 
       if (doc.containsKey("countSensorActiveLevel")) {
         countSensorActiveLevel = doc["countSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
-        Serial.println("MQTT: Applied countSensorActiveLevel: " + String(sensorLevelName(countSensorActiveLevel)));
+        Serial.println("Realtime: Applied countSensorActiveLevel: " + String(sensorLevelName(countSensorActiveLevel)));
         settingsChanged = true;
       }
 
       if (doc.containsKey("inputSensorActiveLevel")) {
         inputSensorActiveLevel = doc["inputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
-        Serial.println("MQTT: Applied inputSensorActiveLevel: " + String(sensorLevelName(inputSensorActiveLevel)));
+        Serial.println("Realtime: Applied inputSensorActiveLevel: " + String(sensorLevelName(inputSensorActiveLevel)));
         settingsChanged = true;
       }
 
       if (doc.containsKey("outputSensorActiveLevel")) {
         outputSensorActiveLevel = doc["outputSensorActiveLevel"].as<int>() == HIGH ? HIGH : LOW;
-        Serial.println("MQTT: Applied outputSensorActiveLevel: " + String(sensorLevelName(outputSensorActiveLevel)));
+        Serial.println("Realtime: Applied outputSensorActiveLevel: " + String(sensorLevelName(outputSensorActiveLevel)));
         settingsChanged = true;
       }
       
       // Lưu settings vào file nếu có thay đổi
       if (settingsChanged) {
         saveSettingsToFile();
-        Serial.println("MQTT: Settings saved to file");
+        Serial.println("Realtime: Settings saved to file");
       }
       
       // Legacy targets
       if (doc.containsKey("target")) {
         targetCount = doc["target"];
-        Serial.println("Target updated via MQTT: " + String(targetCount));
+        Serial.println("Target updated via Realtime: " + String(targetCount));
         needUpdate = true;
       }
       
       // Thêm xử lý resetLimit để ESP32 tiếp tục đếm
       if (doc.containsKey("resetLimit") && doc["resetLimit"]) {
         isLimitReached = false;
-        Serial.println("Limit reset via MQTT - continuing count");
+        Serial.println("Limit reset via realtime - continuing count");
         needUpdate = true;
       }
     }
     
   } else if (topicStr == TOPIC_CMD_BATCH) {
-    Serial.println("MQTT Command: BATCH INFO");
+    Serial.println("Realtime Command: BATCH INFO");
     // Parse JSON batch information
     DynamicJsonDocument doc(1024);
     if (deserializeJson(doc, message) == DeserializationError::Ok) {
@@ -267,16 +267,16 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         JsonObject firstOrder = doc["firstOrder"];
         if (firstOrder.containsKey("productName")) {
           bagType = firstOrder["productName"].as<String>();
-          Serial.println("MQTT: Set first order product: " + bagType);
+          Serial.println("Realtime: Set first order product: " + bagType);
         }
         if (firstOrder.containsKey("customerName")) {
           String customerName = firstOrder["customerName"].as<String>();
-          Serial.println("MQTT: Customer: " + customerName);
+          Serial.println("Realtime: Customer: " + customerName);
         }
         // Cập nhật target từ firstOrder (đơn hàng hiện tại) chứ không phải totalTarget
         if (firstOrder.containsKey("quantity")) {
           targetCount = firstOrder["quantity"] | 20;
-          Serial.println("MQTT: Set current order target: " + String(targetCount));
+          Serial.println("Realtime: Set current order target: " + String(targetCount));
         }
       }
       
@@ -337,7 +337,7 @@ void publishStatusMQTT() {
 }
 
 void publishCountUpdate() {
-  // Throttle count updates để tránh spam MQTT
+  // Throttle count updates để tránh spam realtime
   unsigned long now = millis();
   if (now - lastCountPublish < COUNT_PUBLISH_THROTTLE) {
     return;
