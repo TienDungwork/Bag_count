@@ -75,8 +75,8 @@ void setup() {
   }
   // BƯỚC 3: Khởi tạo hardware
   pinMode(SENSOR_PIN, INPUT_PULLUP);
-  pinMode(TRIGGER_SENSOR_PIN, INPUT);
-  pinMode(OUTPUT_TRIGGER_SENSOR_PIN, INPUT);
+  pinMode(TRIGGER_SENSOR_PIN, INPUT_PULLUP);
+  pinMode(OUTPUT_TRIGGER_SENSOR_PIN, INPUT_PULLUP);
   pinMode(START_LED_PIN, OUTPUT);
   pinMode(DONE_LED_PIN, OUTPUT);
   pinMode(BUTTON_PIN3, INPUT_PULLUP);

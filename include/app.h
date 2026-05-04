@@ -61,8 +61,8 @@ struct decode_results;
 #define OE_PIN 21
 #define CLK_PIN 15
 
-#define SENSOR_PIN 40
-#define TRIGGER_SENSOR_PIN 4
+#define SENSOR_PIN 4
+#define TRIGGER_SENSOR_PIN 40
 #define OUTPUT_TRIGGER_SENSOR_PIN 39
 #define START_LED_PIN 38
 #define DONE_LED_PIN 5
