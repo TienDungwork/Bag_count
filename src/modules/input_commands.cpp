@@ -16,6 +16,15 @@ void handleIRCommand(int button) {
   
   switch(button) {
     case 1: // Start
+      if (qrProductMismatchActive) {
+        Serial.println("IR Remote: START ignored because QR product mismatch alarm is active");
+        currentSystemStatus = "PRODUCT_MISMATCH";
+        action = "PRODUCT_MISMATCH";
+        updateStartLED();
+        updateDoneLED();
+        needUpdate = true;
+        break;
+      }
       Serial.println("🎛️ IR Remote: START");
       isRunning = true;
       isTriggerEnabled = true;
@@ -69,6 +78,7 @@ void handleIRCommand(int button) {
       
     case 3: // Reset
       Serial.println("IR Remote: RESET");
+      clearQrProductMismatch("IR reset");
       totalCount = 0;
       isLimitReached = false;
       isRunning = false;
@@ -202,6 +212,14 @@ void handleWebCommand(int button) {
   
   switch(button) {
     case 1: // Start
+      if (qrProductMismatchActive) {
+        Serial.println("Web START ignored because QR product mismatch alarm is active");
+        currentSystemStatus = "PRODUCT_MISMATCH";
+        updateStartLED();
+        updateDoneLED();
+        needUpdate = true;
+        break;
+      }
       isRunning = true;
       isTriggerEnabled = true;
       isCountingEnabled = true;
@@ -247,6 +265,7 @@ void handleWebCommand(int button) {
       break;
       
     case 3: // Reset
+      clearQrProductMismatch("Web reset");
       totalCount = 0;
       isLimitReached = false;
       isRunning = false;

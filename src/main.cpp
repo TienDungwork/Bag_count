@@ -8,6 +8,7 @@
 #include "web_server.h"
 #include "display.h"
 #include "counter.h"
+#include "qr_reader.h"
 
 IRrecv irrecv(RECV_PIN);
 decode_results results;
@@ -20,8 +21,9 @@ void setup() {
   // Disable watchdog timer to prevent resets during heavy processing
   esp_task_wdt_init(30, false); // 30 second timeout, no panic
   
-  Serial.begin(115200);
+  Serial.begin(QR_READER_BAUD);
   Serial.println("Booting ESP32 Bag Counter System...");
+  setupQrReader();
   
   // Print free heap at startup
   Serial.println("Free heap at startup: " + String(ESP.getFreeHeap()) + " bytes");
@@ -288,6 +290,8 @@ void setup() {
 }
 
 void loop() {
+  handleQrReader();
+
   // Ensure warning LED timeout is evaluated continuously so the LED will
   // turn off after the configured 5 second window even when no new
   // bag count events occur.

@@ -77,6 +77,10 @@ struct decode_results;
 #define BAGTYPES_FILE "/bagtypes.json"
 #define BAGCONFIGS_FILE "/bagconfigs.json"
 
+#ifndef QR_READER_BAUD
+#define QR_READER_BAUD 115200
+#endif
+
 static const int DEFAULT_SENSOR_DETECTED_LEVEL = LOW;
 static const int DEFAULT_SENSOR_CLEAR_LEVEL = HIGH;
 static const uint16_t REALTIME_WS_PORT = 81;
@@ -299,6 +303,16 @@ struct InputState {
   bool hasNewIRCommand = false;
 };
 
+struct QrReaderState {
+  String rxBuffer = "";
+  String lastScannedCode = "";
+  String mismatchScannedCode = "";
+  String mismatchExpectedCode = "";
+  unsigned long lastByteTime = 0;
+  unsigned long lastScanTime = 0;
+  bool productMismatchActive = false;
+};
+
 struct AppContext {
   NetworkState network;
   MqttState mqtt;
@@ -309,6 +323,7 @@ struct AppContext {
   OrderState orders;
   StorageState storage;
   InputState input;
+  QrReaderState qrReader;
 };
 
 extern AppContext app;
@@ -451,11 +466,22 @@ static auto& lastIRCommand = app.input.lastIRCommand;
 static auto& lastIRTimestamp = app.input.lastIRTimestamp;
 static auto& hasNewIRCommand = app.input.hasNewIRCommand;
 static auto& bagConfigs = app.orders.bagConfigs;
+static auto& qrRxBuffer = app.qrReader.rxBuffer;
+static auto& qrLastScannedCode = app.qrReader.lastScannedCode;
+static auto& qrMismatchScannedCode = app.qrReader.mismatchScannedCode;
+static auto& qrMismatchExpectedCode = app.qrReader.mismatchExpectedCode;
+static auto& qrLastByteTime = app.qrReader.lastByteTime;
+static auto& qrLastScanTime = app.qrReader.lastScanTime;
+static auto& qrProductMismatchActive = app.qrReader.productMismatchActive;
 
 unsigned long mapIRButton(unsigned long code);
 void handleIRCommand(int button);
 void loadCurrentOrderForDisplay();
 void handleWebCommand(int button);
+void setupQrReader();
+void handleQrReader();
+void clearQrProductMismatch(const String& reason = "");
+String currentExpectedQrProductCode();
 
 void saveBagTypesToFile();
 void loadBagTypesFromFile();

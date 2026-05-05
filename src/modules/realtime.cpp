@@ -312,6 +312,10 @@ void publishStatusMQTT() {
   doc["currentMode"] = currentMode;
   doc["lastMeasuredTime"] = lastMeasuredTime;
   doc["isMeasuringSensor"] = isMeasuringSensor;
+  doc["qrMismatch"] = qrProductMismatchActive;
+  doc["qrLastCode"] = qrLastScannedCode;
+  doc["qrMismatchCode"] = qrMismatchScannedCode;
+  doc["qrExpectedCode"] = qrProductMismatchActive ? qrMismatchExpectedCode : currentExpectedQrProductCode();
   int sensorReading = digitalRead(SENSOR_PIN);
   doc["sensorCurrentState"] = sensorRawStateName(sensorReading);
   doc["sensorBlocked"] = isSensorBlocked(sensorReading);

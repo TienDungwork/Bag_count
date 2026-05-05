@@ -770,6 +770,12 @@ void updateCount(int bagCount) {
 }
 
 void updateDoneLED() {
+  if (qrProductMismatchActive) {
+    doneLedOn = true;
+    digitalWrite(DONE_LED_PIN, HIGH);
+    return;
+  }
+
   // Đèn DONE (GPIO 5) với logic Active HIGH - BẬT khi đạt ngưỡng cảnh báo hoặc hoàn thành
   doneLedOn = false; // Mặc định TẮT
   
@@ -857,10 +863,19 @@ void updateStartLED() {
   bool currentButtonState = digitalRead(BUTTON_PIN3);
   if (currentButtonState == LOW && lastButtonState == HIGH) {
     if (millis() - lastButtonTime > buttonDebounceTime) {
-      isRunning = true;
-      currentSystemStatus = "RUNNING";
-      action = "START";
-      Serial.println("BUTTON_PIN3 press");
+      if (qrProductMismatchActive) {
+        isRunning = false;
+        isTriggerEnabled = false;
+        isCountingEnabled = false;
+        isStartAuthorized = false;
+        currentSystemStatus = "PRODUCT_MISMATCH";
+        Serial.println("BUTTON_PIN3 ignored because QR product mismatch alarm is active");
+      } else {
+        isRunning = true;
+        currentSystemStatus = "RUNNING";
+        action = "START";
+        Serial.println("BUTTON_PIN3 press");
+      }
       
       needUpdate = true;
       lastButtonTime = millis();
@@ -896,6 +911,17 @@ void updateStartLED() {
   // Đèn START (GPIO 38 - relay) logic cập nhật:
   // - Sáng (HIGH) khi: isRunning = true HOẶC đang trong thời gian relay delay
   // - Tắt (LOW) khi: isRunning = false VÀ không trong thời gian relay delay
+
+  if (qrProductMismatchActive) {
+    isRunning = false;
+    isTriggerEnabled = false;
+    isCountingEnabled = false;
+    isStartAuthorized = false;
+    currentSystemStatus = "PRODUCT_MISMATCH";
+    startLedOn = false;
+    digitalWrite(START_LED_PIN, LOW);
+    return;
+  }
   
   if (isRunning || isRelayDelayActive) {
     startLedOn = true;  // Sáng (HIGH) - relay hoạt động
