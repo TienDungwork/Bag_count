@@ -550,6 +550,15 @@ void updateCount(int bagCount) {
               String newProductCode = orderProductCodeFromJson(nextOrder);
               int quantity = nextOrder["quantity"] | 1;
               int warningQuantity = nextOrder["warningQuantity"].as<int>() | 5; // Mặc định 5 nếu không có
+              String nextStatus = nextOrder["status"].as<String>();
+              int resumeCount = 0;
+              if (nextStatus == "paused") {
+                int savedCurrentCount = nextOrder["currentCount"] | 0;
+                int savedExecuteCount = nextOrder["executeCount"] | 0;
+                resumeCount = savedCurrentCount > savedExecuteCount ? savedCurrentCount : savedExecuteCount;
+                if (resumeCount < 0) resumeCount = 0;
+                if (resumeCount > quantity) resumeCount = quantity;
+              }
               
               Serial.println("Found next order with warningQuantity: " + String(warningQuantity));
               
@@ -579,12 +588,14 @@ void updateCount(int bagCount) {
               
               // Cập nhật trạng thái đơn mới thành counting
               nextOrder["status"] = "counting";
+              nextOrder["currentCount"] = resumeCount;
+              nextOrder["executeCount"] = resumeCount;
               
               // CẬP NHẬT BIẾN HIỂN THỊ
               bagType = productName;
               productCode = newProductCode;
               targetCount = quantity;
-              totalCount = 0;  // Reset số đếm về 0
+              totalCount = resumeCount;  // Resume đơn paused, chỉ về 0 khi là đơn mới
               isLimitReached = false;
               // Ép trạng thái chạy để đảm bảo đơn tiếp theo đếm thật sự
               isRunning = true;
@@ -600,7 +611,7 @@ void updateCount(int bagCount) {
               Serial.println("   ProductName: " + productName);
               Serial.println("   ProductCode: " + newProductCode);
               Serial.println("   Target: " + String(quantity) + " bags");
-              Serial.println("   Count reset to 0, continue running");
+              Serial.println("   ResumeCount: " + String(resumeCount) + ", continue running");
               
               // Lưu thay đổi vào file
               saveOrdersToFile();

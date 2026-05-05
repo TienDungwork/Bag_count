@@ -136,9 +136,14 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
               order["selected"] = true;
               order["status"] = keepCount ? "paused" : "waiting";
               if (keepCount) {
-                if (currentCountFromWeb > 0) {
-                  order["currentCount"] = currentCountFromWeb;
-                  order["executeCount"] = currentCountFromWeb;
+                int savedCurrentCount = order["currentCount"] | 0;
+                int savedExecuteCount = order["executeCount"] | 0;
+                int savedCount = savedCurrentCount > savedExecuteCount ? savedCurrentCount : savedExecuteCount;
+                int countToKeep = currentCountFromWeb > 0 ? currentCountFromWeb : savedCount;
+                if (countToKeep > 0) {
+                  order["currentCount"] = countToKeep;
+                  order["executeCount"] = countToKeep;
+                  totalCount = countToKeep;
                 }
               } else {
                 order["currentCount"] = 0;

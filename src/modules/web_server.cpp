@@ -601,19 +601,29 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           
           for (size_t j = 0; j < orders.size(); j++) {
             JsonObject order = orders[j];
-            String orderProductCode = "";
-            if (order.containsKey("product") && order["product"].containsKey("code")) {
-              orderProductCode = order["product"]["code"].as<String>();
-            }
+            String orderProductCode = orderProductCodeFromJson(order);
             String orderOrderCode = order["orderCode"].as<String>();
             
             // Đánh dấu đơn hiện tại là SELECTED
             if (orderProductCode == productCodeFromWeb && orderOrderCode == orderCodeFromWeb) {
+              int countToKeep = 0;
+              if (keepCount) {
+                int savedCurrentCount = order["currentCount"] | 0;
+                int savedExecuteCount = order["executeCount"] | 0;
+                int savedCount = savedCurrentCount > savedExecuteCount ? savedCurrentCount : savedExecuteCount;
+                countToKeep = existingCount > 0 ? existingCount : savedCount;
+                if (countToKeep < 0) countToKeep = 0;
+                if (countToKeep > 0) {
+                  totalCount = countToKeep;
+                  isLimitReached = false;
+                }
+              }
+
               order["selected"] = true;
               order["status"] = isRunningOrder ? "counting" : (keepCount ? "paused" : "waiting");
-              order["currentCount"] = keepCount ? existingCount : 0;
-              order["executeCount"] = keepCount ? existingCount : 0;
-              Serial.println("Marked order with productCode " + productCodeFromWeb + " as SELECTED");
+              order["currentCount"] = keepCount ? countToKeep : 0;
+              order["executeCount"] = keepCount ? countToKeep : 0;
+              Serial.println("Marked order with productCode " + productCodeFromWeb + " as SELECTED, count=" + String(keepCount ? countToKeep : 0));
             }
           }
         }
@@ -2758,8 +2768,14 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                   if (detailStatus.length() > 0) {
                     order["status"] = detailStatus;
                   }
-                  order["currentCount"] = detailCurrentCount;
-                  order["executeCount"] = detailCurrentCount;
+                  int countToStore = detailCurrentCount;
+                  if (detailStatus == "paused" && countToStore <= 0) {
+                    int savedCurrentCount = order["currentCount"] | 0;
+                    int savedExecuteCount = order["executeCount"] | 0;
+                    countToStore = savedCurrentCount > savedExecuteCount ? savedCurrentCount : savedExecuteCount;
+                  }
+                  order["currentCount"] = countToStore;
+                  order["executeCount"] = countToStore;
 
                   // Ghi productCode phẳng để match ổn định phía web
                   if (detailProductCode.length() > 0) {
@@ -2796,7 +2812,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       
       if (batchFound) {
         // Nếu web gửi đơn đầu tiên đã tích, đồng bộ ngay để ESP32 biết đơn bắt đầu
-        if (!firstSelectedOrder.isNull()) {
+        if (activeCountingOrder.isNull() && !firstSelectedOrder.isNull()) {
           String firstProductName = firstSelectedOrder["productName"].as<String>();
           String firstProductCode = firstSelectedOrder["productCode"].as<String>();
           String firstOrderCode = firstSelectedOrder["orderCode"].as<String>();

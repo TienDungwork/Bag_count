@@ -5,6 +5,7 @@ let currentBatchId = null;
 let currentOrderBatch = []; // Current batch being edited
 let hasAutoLoadedCurrentBatch = false; // Tránh phải click đổi qua lại mới hiện dữ liệu
 let currentProducts = [];
+let editingProductId = null;
 
 // Toggle log hiển thị trên console trình duyệt
 const ENABLE_WEB_CONSOLE_LOG = false;
@@ -395,11 +396,11 @@ async function loadHistoryFromESP32() {
             e.orderCode === entry.orderCode &&
             e.customerName === entry.customerName
           ) !== index;
-          
+
           if (isDuplicate) {
             console.log('🗑️ Removing duplicate:', entry);
           }
-          
+
           return !isDuplicate;
         });
         
@@ -1001,26 +1002,38 @@ async function updateDeviceStatus(data) {
     } else if (data.status === 'RESET') {
       // console.log('IR Remote RESET detected - resetting all orders');
       
-      // Chỉ xử lý nếu chưa reset hoặc đang active
-      if (countingState.isActive || countingState.totalCounted > 0) {
+      const activeBatch = orderBatches.find(b => b.isActive);
+      const hasPausedProgress = activeBatch && activeBatch.orders.some(order =>
+        order.selected && order.status === 'paused' && getOrderSavedCount(order) > 0
+      );
+
+      // ESP32 cũng phát RESET khi hoàn thành hết các đơn đang chạy và dừng máy.
+      // Trường hợp còn đơn paused có tiến độ thì phải giữ số để resume, không xóa về 0.
+      if (hasPausedProgress) {
         countingState.isActive = false;
-        countingState.currentOrderIndex = 0;
-        countingState.totalPlanned = 0;
-        countingState.totalCounted = 0;
-        
-        // Reset tất cả đơn hàng VỀ WAITING (không phải paused)
-        const activeBatch = orderBatches.find(b => b.isActive);
-        if (activeBatch) {
-          const selectedOrders = activeBatch.orders.filter(o => o.selected);
-          selectedOrders.forEach(order => {
-            order.status = 'waiting'; // Đảm bảo về waiting
-            order.currentCount = 0;
-          });
-          saveOrderBatches();
-          updateOrderTable();
-        }
         updateOverview();
-        showNotification('Reset đếm hoàn tất', 'info');
+        updateOrderTable();
+      } else {
+        // Chỉ xử lý nếu chưa reset hoặc đang active
+        if (countingState.isActive || countingState.totalCounted > 0) {
+          countingState.isActive = false;
+          countingState.currentOrderIndex = 0;
+          countingState.totalPlanned = 0;
+          countingState.totalCounted = 0;
+          // Reset tất cả đơn hàng VỀ WAITING (không phải paused)
+          if (activeBatch) {
+            const selectedOrders = activeBatch.orders.filter(o => o.selected);
+            selectedOrders.forEach(order => {
+              order.status = 'waiting'; // Đảm bảo về waiting
+              order.currentCount = 0;
+              order.executeCount = 0;
+            });
+            saveOrderBatches();
+            updateOrderTable();
+          }
+          updateOverview();
+          showNotification('Reset đếm hoàn tất', 'info');
+        }
       }
     }
   }
@@ -2129,6 +2142,9 @@ function updateBatchPreview() {
       <td>${productDisplay}</td>
       <td>${order.quantity}</td>
       <td>
+        <button class="edit-btn" onclick="editBatchPreviewOrder(${index})" style="padding: 5px 10px; font-size: 12px;">
+          <i class="fas fa-edit"></i>
+        </button>
         <button class="btn-danger" onclick="removeOrderFromBatch(${index})" style="padding: 5px 10px; font-size: 12px;">
           <i class="fas fa-trash"></i>
         </button>
@@ -2969,6 +2985,7 @@ async function startCounting() {
       selectedOrders.forEach(order => {
         order.status = 'waiting';
         order.currentCount = 0;
+        order.executeCount = 0;
       });
       currentOrderIndex = 0;
     }
@@ -3244,6 +3261,7 @@ async function resetCounting() {
         if (order.selected) {
           order.status = 'waiting'; // FORCE về waiting
           order.currentCount = 0;
+          order.executeCount = 0;
         }
       });
       
@@ -3395,7 +3413,7 @@ async function sendOrdersOneByOne(orders) {
 }
 
 // Product Management (Updated)
-function addProduct() {
+function saveProductForm() {
   const productGroup = document.getElementById('productGroup').value.trim();
   const productName = document.getElementById('productName').value.trim();
   const productCode = document.getElementById('productCode').value.trim();
@@ -3407,32 +3425,73 @@ function addProduct() {
   }
   
   // Check if product code already exists
-  if (currentProducts.find(p => p.code === productCode)) {
+  if (currentProducts.find(p => p.code === productCode && String(p.id) !== String(editingProductId))) {
     alert('Mã sản phẩm đã tồn tại');
     return;
   }
-  
-  const newProduct = {
-    id: productIdCounter++,
-    group: productGroup,
-    name: productName,
-    code: productCode,
-    unitWeight: unitWeight,
-    createdAt: new Date().toISOString()
-  };
-  
-  currentProducts.push(newProduct);
+
+  if (editingProductId !== null) {
+    const productIndex = currentProducts.findIndex(p => String(p.id) === String(editingProductId));
+    if (productIndex === -1) {
+      alert('Không tìm thấy sản phẩm cần sửa');
+      cancelProductEdit();
+      return;
+    }
+
+    const oldProduct = { ...currentProducts[productIndex] };
+    const updatedProduct = {
+      ...oldProduct,
+      group: productGroup,
+      name: productName,
+      code: productCode,
+      unitWeight: unitWeight,
+      updatedAt: new Date().toISOString()
+    };
+
+    currentProducts[productIndex] = updatedProduct;
+    syncProductReferences(updatedProduct, oldProduct);
+    showNotification('Cập nhật sản phẩm thành công', 'success');
+  } else {
+    const newProduct = {
+      id: productIdCounter++,
+      group: productGroup,
+      name: productName,
+      code: productCode,
+      unitWeight: unitWeight,
+      createdAt: new Date().toISOString()
+    };
+
+    currentProducts.push(newProduct);
+    showNotification('Thêm sản phẩm thành công', 'success');
+  }
+
   saveProducts();
+  saveOrderBatches();
   updateProductTable();
   updateAllProductSelects(); // Cập nhật tất cả dropdown
+  updateBatchPreview();
+  updateOrderTable();
+  updateOverview();
   
-  // Clear form
-  document.getElementById('productForm').reset();
-  showNotification('Thêm sản phẩm thành công', 'success');
+  if (editingProductId !== null) {
+    sendOrderBatchesToESP32();
+  }
+
+  cancelProductEdit();
 }
 
-function editProduct(index) {
-  const product = currentProducts[index];
+function addProduct() {
+  saveProductForm();
+}
+
+function editProduct(productId) {
+  const product = currentProducts.find(p => String(p.id) === String(productId));
+  if (!product) {
+    showNotification('Không tìm thấy sản phẩm cần sửa', 'error');
+    return;
+  }
+
+  editingProductId = product.id;
   document.getElementById('productGroup').value = product.group || '';
   document.getElementById('productName').value = product.name;
   document.getElementById('productCode').value = product.code;
@@ -3448,10 +3507,59 @@ function editProduct(index) {
     }
     unitWeightSelect.value = productWeightValue;
   }
-  
-  // Remove the product temporarily for validation
-  currentProducts.splice(index, 1);
-  updateProductTable();
+
+  const submitBtn = document.getElementById('productSubmitBtn');
+  if (submitBtn) {
+    submitBtn.innerHTML = '<i class="fas fa-save"></i> Lưu thay đổi';
+  }
+
+  const cancelBtn = document.getElementById('productCancelEditBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = 'inline-flex';
+  }
+
+  document.getElementById('productForm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelProductEdit() {
+  editingProductId = null;
+  const form = document.getElementById('productForm');
+  if (form) form.reset();
+
+  const submitBtn = document.getElementById('productSubmitBtn');
+  if (submitBtn) {
+    submitBtn.innerHTML = '<i class="fas fa-plus"></i> Thêm';
+  }
+
+  const cancelBtn = document.getElementById('productCancelEditBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = 'none';
+  }
+}
+
+function syncProductReferences(updatedProduct, oldProduct) {
+  const applyToOrder = (order) => {
+    if (!order) return;
+
+    const matchesProduct =
+      (order.product && String(order.product.id) === String(updatedProduct.id)) ||
+      (oldProduct.code && order.productCode === oldProduct.code) ||
+      (order.product && oldProduct.code && order.product.code === oldProduct.code) ||
+      (oldProduct.name && order.productName === oldProduct.name);
+
+    if (!matchesProduct) return;
+
+    order.product = { ...updatedProduct };
+    order.productName = updatedProduct.name;
+    order.productCode = updatedProduct.code || '';
+    order.type = updatedProduct.code || updatedProduct.name || '';
+  };
+
+  orderBatches.forEach(batch => {
+    (batch.orders || []).forEach(applyToOrder);
+  });
+
+  currentOrderBatch.forEach(applyToOrder);
 }
 
 function updateProductTable() {
@@ -3474,13 +3582,17 @@ function updateProductTable() {
     console.log('Adding product to table:', product.code, product.name, product.unitWeight + 'kg');
     
     const row = document.createElement('tr');
+    const productIdArg = JSON.stringify(product.id);
     row.innerHTML = `
       <td>${product.group || ''}</td>
       <td>${product.code}</td>
       <td>${product.name}</td>
       <td>${product.unitWeight || 0} kg</td>
       <td>
-        <button class="btn-danger" onclick="deleteProduct(${product.id})">
+        <button class="edit-btn" onclick="editProduct(${productIdArg})">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn-danger" onclick="deleteProduct(${productIdArg})">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -3519,7 +3631,7 @@ function updateAllProductSelects() {
     editProductSelect.innerHTML = '<option value="">Chọn sản phẩm</option>';
     currentProducts.forEach(product => {
       const option = document.createElement('option');
-      option.value = product.name; // Dùng name thay vì id cho edit
+      option.value = product.id;
       const displayText = product.group ? 
         `${product.group} - ${product.code} - ${product.name}` : 
         `${product.code} - ${product.name}`;
@@ -5367,8 +5479,12 @@ function setMode(mode) {
 // Product Management
 function deleteProduct(id) {
   if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+    if (String(editingProductId) === String(id)) {
+      cancelProductEdit();
+    }
+
     // Xóa từ array local
-    currentProducts = currentProducts.filter(p => p.id !== id);
+    currentProducts = currentProducts.filter(p => String(p.id) !== String(id));
     
     // Lưu và sync với ESP32
     saveProducts();
@@ -7374,13 +7490,8 @@ function resetOrderForm() {
 function editOrder(index) {
   const order = getCurrentOrdersForDisplay()[index];
   if (!order) return;
-  
-  // Fill edit form
-  document.getElementById('editOrderIndex').value = index;
-  document.getElementById('editQuantity').value = order.quantity;
-  
-  // Show modal
-  document.getElementById('editOrderModal').style.display = 'block';
+
+  openEditOrderModal(order, index, 'active');
 }
 
 function getCurrentOrdersForDisplay() {
@@ -7398,43 +7509,119 @@ function editOrderById(orderId) {
   editOrder(orderIndex);
 }
 
+function editBatchPreviewOrder(index) {
+  const order = currentOrderBatch[index];
+  if (!order) return;
+
+  openEditOrderModal(order, index, 'batchPreview');
+}
+
+function openEditOrderModal(order, index, source) {
+  updateAllProductSelects();
+
+  document.getElementById('editOrderIndex').value = index;
+  document.getElementById('editOrderSource').value = source;
+  document.getElementById('editCustomerName').value = order.customerName || '';
+  document.getElementById('editOrderCode').value = order.orderCode || '';
+  document.getElementById('editVehicleNumber').value = order.vehicleNumber || '';
+  document.getElementById('editQuantity').value = order.quantity || '';
+  document.getElementById('editWarningQuantity').value = order.warningQuantity || '';
+
+  const productSelect = document.getElementById('editProductSelect');
+  if (productSelect) {
+    const matchedProduct = currentProducts.find(p =>
+      (order.product && order.product.id && p.id == order.product.id) ||
+      (order.productCode && p.code == order.productCode) ||
+      (order.product && order.product.code && p.code == order.product.code) ||
+      (order.productName && p.name == order.productName)
+    );
+    productSelect.value = matchedProduct ? matchedProduct.id : '';
+  }
+
+  document.getElementById('editOrderModal').style.display = 'block';
+}
+
 function closeEditOrderModal() {
   document.getElementById('editOrderModal').style.display = 'none';
 }
 
 function saveEditOrder() {
   const index = parseInt(document.getElementById('editOrderIndex').value);
+  const source = document.getElementById('editOrderSource').value || 'active';
+  const customerName = document.getElementById('editCustomerName').value.trim();
+  const orderCode = document.getElementById('editOrderCode').value.trim();
+  const vehicleNumber = document.getElementById('editVehicleNumber').value.trim();
+  const productId = document.getElementById('editProductSelect').value;
   const quantity = parseInt(document.getElementById('editQuantity').value);
+  const warningQuantity = parseInt(document.getElementById('editWarningQuantity').value) || 5;
   
-  if (!quantity || quantity < 1) {
-    showNotification('Vui lòng nhập số lượng hợp lệ', 'error');
+  if (!customerName || !orderCode || !vehicleNumber || !productId || !quantity || quantity < 1) {
+    showNotification('Vui lòng nhập đầy đủ thông tin đơn hàng hợp lệ', 'error');
     return;
   }
-  
-  // Find active batch and update order
+
+  const product = currentProducts.find(p => p.id == productId);
+  if (!product) {
+    showNotification('Sản phẩm không hợp lệ', 'error');
+    return;
+  }
+
+  const applyEdit = (oldOrder) => ({
+    ...oldOrder,
+    customerName,
+    orderCode,
+    vehicleNumber,
+    product: { ...product },
+    productName: product.name,
+    productCode: product.code || '',
+    type: product.code || product.name || '',
+    quantity,
+    warningQuantity,
+    updatedAt: new Date().toISOString()
+  });
+
+  if (source === 'batchPreview') {
+    if (!currentOrderBatch[index]) return;
+
+    currentOrderBatch[index] = applyEdit(currentOrderBatch[index]);
+    currentOrderBatch.forEach((order, i) => {
+      order.orderNumber = i + 1;
+    });
+
+    if (currentBatchId) {
+      const batchIndex = orderBatches.findIndex(b => b.id == currentBatchId);
+      if (batchIndex !== -1) {
+        orderBatches[batchIndex].orders = [...currentOrderBatch];
+        saveOrderBatches();
+        sendOrderBatchesToESP32();
+      }
+    }
+
+    updateBatchPreview();
+    updateOverview();
+    closeEditOrderModal();
+    showNotification('Đã cập nhật đơn hàng', 'success');
+    return;
+  }
+
   const batch = orderBatches.find(b => b.isActive);
   const batchIndex = orderBatches.findIndex(b => b.isActive);
-  
+
   if (batch && batch.orders[index] && batchIndex !== -1) {
-    const oldOrder = batch.orders[index];
-    
-    // Chỉ update số lượng
-    batch.orders[index] = {
-      ...oldOrder,
-      quantity: quantity
-    };
-    
-    // Save to localStorage
+    batch.orders[index] = applyEdit(batch.orders[index]);
+
+    if (currentBatchId && String(currentBatchId) === String(batch.id)) {
+      currentOrderBatch = [...batch.orders];
+    }
+
     saveOrderBatches();
-    
-    // Send update to ESP32
-    sendOrderUpdateToESP32(batch.orders[index], batchIndex);
-    
-    // Refresh display
+    sendOrderBatchesToESP32();
+
     updateOrderTable();
-    updateOverview(); // Cập nhật số liệu tổng quan sau khi sửa
+    updateBatchPreview();
+    updateOverview();
     closeEditOrderModal();
-    showNotification('Đã cập nhật số lượng thành công', 'success');
+    showNotification('Đã cập nhật đơn hàng', 'success');
   }
 }
 

@@ -382,9 +382,14 @@
                 </select>
               </div>
               
-              <button type="button" class="btn-primary" onclick="addProduct()">
-                <i class="fas fa-plus"></i> Thêm
-              </button>
+              <div class="form-actions">
+                <button type="button" class="btn-primary" id="productSubmitBtn" onclick="saveProductForm()">
+                  <i class="fas fa-plus"></i> Thêm
+                </button>
+                <button type="button" class="btn-secondary" id="productCancelEditBtn" onclick="cancelProductEdit()" style="display:none;">
+                  <i class="fas fa-times"></i> Hủy sửa
+                </button>
+              </div>
             </form>
           </div>
           
@@ -696,9 +701,32 @@
       <div class="modal-body">
         <form id="editOrderForm">
           <input type="hidden" id="editOrderIndex">
+          <input type="hidden" id="editOrderSource">
+          <div class="form-group">
+            <label for="editCustomerName">Số điện thoại:</label>
+            <input type="text" id="editCustomerName" required>
+          </div>
+          <div class="form-group">
+            <label for="editOrderCode">Mã đơn hàng:</label>
+            <input type="text" id="editOrderCode" required>
+          </div>
+          <div class="form-group">
+            <label for="editVehicleNumber">Địa chỉ:</label>
+            <input type="text" id="editVehicleNumber" required>
+          </div>
+          <div class="form-group">
+            <label for="editProductSelect">Sản phẩm:</label>
+            <select id="editProductSelect" required>
+              <option value="">Chọn sản phẩm</option>
+            </select>
+          </div>
           <div class="form-group">
             <label for="editQuantity">Số lượng:</label>
             <input type="number" id="editQuantity" min="1" required>
+          </div>
+          <div class="form-group">
+            <label for="editWarningQuantity">Cảnh báo gần xong:</label>
+            <input type="number" id="editWarningQuantity" min="1">
           </div>
         </form>
       </div>
