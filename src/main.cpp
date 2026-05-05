@@ -21,7 +21,7 @@ void setup() {
   // Disable watchdog timer to prevent resets during heavy processing
   esp_task_wdt_init(30, false); // 30 second timeout, no panic
   
-  Serial.begin(QR_READER_BAUD);
+  Serial.begin(QR_READER_BAUD, SERIAL_8N1, QR_READER_RX_PIN, -1);
   Serial.println("Booting ESP32 Bag Counter System...");
   setupQrReader();
   

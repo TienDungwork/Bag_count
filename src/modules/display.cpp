@@ -415,14 +415,14 @@ void updateDisplay() {
   if (noOrder) {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
-    int maxCodeLen = 7;
+    int maxCodeLen = 12;
     if (utf8CharCount(displayText) > maxCodeLen) {
       String line1 = utf8SliceChars(displayText, 0, maxCodeLen);
       String line2 = utf8SliceChars(displayText, maxCodeLen, maxCodeLen);
-      drawVietnameseText(1, 5, line1, myYELLOW, 1.5f);
-      drawVietnameseText(1, 16, line2, myYELLOW, 1.5f);
+      drawVietnameseText(1, 5, line1, myYELLOW, 1.0f);
+      drawVietnameseText(1, 14, line2, myYELLOW, 1.0f);
     } else {
-      drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
+      drawVietnameseText(1, 5, displayText, myYELLOW, 1.0f);
     }
   }
 

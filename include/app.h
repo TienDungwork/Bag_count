@@ -81,6 +81,10 @@ struct decode_results;
 #define QR_READER_BAUD 115200
 #endif
 
+#ifndef QR_READER_RX_PIN
+#define QR_READER_RX_PIN 42
+#endif
+
 static const int DEFAULT_SENSOR_DETECTED_LEVEL = LOW;
 static const int DEFAULT_SENSOR_CLEAR_LEVEL = HIGH;
 static const uint16_t REALTIME_WS_PORT = 81;

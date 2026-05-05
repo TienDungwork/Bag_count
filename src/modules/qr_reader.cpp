@@ -110,7 +110,7 @@ void setupQrReader() {
   qrMismatchScannedCode = "";
   qrMismatchExpectedCode = "";
   qrProductMismatchActive = false;
-  Serial.println("QR reader initialized on UART0 RXD0 (shared with programming RX pin), " + String(QR_READER_BAUD) + " baud.");
+  Serial.println("QR reader initialized on RX GPIO" + String(QR_READER_RX_PIN) + ", " + String(QR_READER_BAUD) + " baud.");
 }
 
 void handleQrReader() {
