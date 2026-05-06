@@ -76,8 +76,13 @@ static void stopForQrProductMismatch(const String& scannedCode, const String& ex
 }
 
 static void processQrFrame(String frame) {
+  Serial.println("QR raw frame: '" + frame + "'");
+
   String scannedCode = normalizeQrProductCode(frame);
-  if (scannedCode.length() == 0) return;
+  if (scannedCode.length() == 0) {
+    Serial.println("QR frame ignored after normalize: empty");
+    return;
+  }
 
   unsigned long now = millis();
   if (scannedCode == qrLastScannedCode && now - qrLastScanTime < QR_DUPLICATE_WINDOW_MS) {
@@ -96,6 +101,7 @@ static void processQrFrame(String frame) {
   Serial.println("QR read: scanned=" + scannedCode + ", expected=" + expectedCode);
 
   if (scannedCode == expectedCode) {
+    Serial.println("QR MATCH OK: " + scannedCode);
     clearQrProductMismatch("Đã đọc đúng mã QR: " + scannedCode);
     return;
   }
@@ -109,8 +115,13 @@ void setupQrReader() {
   qrLastScannedCode = "";
   qrMismatchScannedCode = "";
   qrMismatchExpectedCode = "";
+  qrTotalBytesReceived = 0;
+  qrHasSeenData = false;
   qrProductMismatchActive = false;
-  Serial.println("QR reader initialized on RX GPIO" + String(QR_READER_RX_PIN) + ", " + String(QR_READER_BAUD) + " baud.");
+  Serial.println("QR reader UART0 initialized: RX GPIO" + String(QR_READER_RX_PIN) +
+                 ", TX GPIO" + String(QR_READER_TX_PIN) +
+                 ", baud " + String(QR_READER_BAUD));
+  Serial.println("QR reader waiting for data. UART has no connect handshake; first scan will confirm wiring/baud.");
 }
 
 void handleQrReader() {
@@ -123,6 +134,13 @@ void handleQrReader() {
   while (Serial.available() > 0) {
     char c = (char)Serial.read();
     qrLastByteTime = millis();
+    qrTotalBytesReceived++;
+
+    if (!qrHasSeenData) {
+      qrHasSeenData = true;
+      Serial.println("QR serial data detected on RX GPIO" + String(QR_READER_RX_PIN) +
+                     ". First byte decimal=" + String((uint8_t)c));
+    }
 
     if (c == '\r' || c == '\n') {
       if (qrRxBuffer.length() > 0) {

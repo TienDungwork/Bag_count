@@ -82,7 +82,11 @@ struct decode_results;
 #endif
 
 #ifndef QR_READER_RX_PIN
-#define QR_READER_RX_PIN 42
+#define QR_READER_RX_PIN 44
+#endif
+
+#ifndef QR_READER_TX_PIN
+#define QR_READER_TX_PIN 43
 #endif
 
 static const int DEFAULT_SENSOR_DETECTED_LEVEL = LOW;
@@ -314,6 +318,8 @@ struct QrReaderState {
   String mismatchExpectedCode = "";
   unsigned long lastByteTime = 0;
   unsigned long lastScanTime = 0;
+  unsigned long totalBytesReceived = 0;
+  bool hasSeenData = false;
   bool productMismatchActive = false;
 };
 
@@ -476,6 +482,8 @@ static auto& qrMismatchScannedCode = app.qrReader.mismatchScannedCode;
 static auto& qrMismatchExpectedCode = app.qrReader.mismatchExpectedCode;
 static auto& qrLastByteTime = app.qrReader.lastByteTime;
 static auto& qrLastScanTime = app.qrReader.lastScanTime;
+static auto& qrTotalBytesReceived = app.qrReader.totalBytesReceived;
+static auto& qrHasSeenData = app.qrReader.hasSeenData;
 static auto& qrProductMismatchActive = app.qrReader.productMismatchActive;
 
 unsigned long mapIRButton(unsigned long code);
