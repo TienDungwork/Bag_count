@@ -77,17 +77,12 @@ struct decode_results;
 #define BAGTYPES_FILE "/bagtypes.json"
 #define BAGCONFIGS_FILE "/bagconfigs.json"
 
-#ifndef QR_READER_BAUD
-#define QR_READER_BAUD 115200
+#ifndef SERIAL_MONITOR_BAUD
+#define SERIAL_MONITOR_BAUD 115200
 #endif
 
-#ifndef QR_READER_RX_PIN
-#define QR_READER_RX_PIN 44
-#endif
-
-#ifndef QR_READER_TX_PIN
-#define QR_READER_TX_PIN 43
-#endif
+#define QR_READER_USB_N_PIN 19
+#define QR_READER_USB_P_PIN 20
 
 static const int DEFAULT_SENSOR_DETECTED_LEVEL = LOW;
 static const int DEFAULT_SENSOR_CLEAR_LEVEL = HIGH;
