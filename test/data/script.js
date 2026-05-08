@@ -4433,7 +4433,7 @@ function updateSettingsForm() {
   const mqtt2UsernameEl = document.getElementById('mqtt2Username');
   const mqtt2PasswordEl = document.getElementById('mqtt2Password');
   
-  if (mqtt2ServerEl) mqtt2ServerEl.value = settings.mqtt2Server || '103.57.220.146';
+  if (mqtt2ServerEl) mqtt2ServerEl.value = settings.mqtt2Server || '202.92.6.245';
   if (mqtt2PortEl) mqtt2PortEl.value = settings.mqtt2Port || 1884;
   if (mqtt2UsernameEl) mqtt2UsernameEl.value = settings.mqtt2Username || 'countingsystem';
   if (mqtt2PasswordEl) mqtt2PasswordEl.value = settings.mqtt2Password || '';

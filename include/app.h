@@ -160,7 +160,7 @@ struct NetworkState {
 };
 
 struct MqttState {
-  String mqtt_server2 = "103.57.220.146";
+  String mqtt_server2 = "202.92.6.245";
   int mqtt_port2 = 1884;
   String mqtt2_username = "countingsystem";
   String mqtt2_password = "";
