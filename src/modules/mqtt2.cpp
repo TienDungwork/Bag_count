@@ -18,8 +18,8 @@ void setupMQTT2() {
   
   mqtt2.setServer(mqtt_server2.c_str(), mqtt_port2);
   mqtt2.setCallback(onMqttMessage2);
-  // mqtt2.setBufferSize(512);  // Không có trong bản PubSubClient cũ
-  // mqtt2.setKeepAlive(60);    // Khuyến nghị 60 giây
+  mqtt2.setBufferSize(1024);
+  mqtt2.setKeepAlive(60);
   
   // Tạo client ID random như khuyến nghị
   String clientId2 = "ESP32Device_" + String(random(100000, 999999));
@@ -67,8 +67,23 @@ void onMqttMessage2(char* topic, byte* payload, unsigned int length) {
 // PAYLOAD gửi lên MQTT2
 void publishMQTT2OrderComplete() {
   // Kiểm tra điều kiện kết nối
-  if (currentNetworkMode == WIFI_AP_MODE || !mqtt2.connected() || mqtt2_password.length() == 0) {
-    Serial.println("MQTT2: Không thể gửi - chưa kết nối hoặc chưa có KeyLogin");
+  if (currentNetworkMode == WIFI_AP_MODE) {
+    Serial.println("MQTT2: Không thể gửi - đang ở AP mode");
+    return;
+  }
+
+  if (mqtt2_password.length() == 0) {
+    Serial.println("MQTT2: Không thể gửi - chưa có KeyLogin");
+    return;
+  }
+
+  if (!mqtt2.connected()) {
+    Serial.println("MQTT2: Chưa kết nối, thử reconnect trước khi gửi...");
+    setupMQTT2();
+  }
+
+  if (!mqtt2.connected()) {
+    Serial.println("MQTT2: Không thể gửi - reconnect thất bại, rc=" + String(mqtt2.state()));
     return;
   }
   
@@ -77,13 +92,9 @@ void publishMQTT2OrderComplete() {
   
   DynamicJsonDocument doc(768);
   
-  // 1. orderCode - Mã đơn hàng hiện tại
-  doc["orderCode"] = orderCode;
-  
-  // 2. productGroup - Nhóm sản phẩm (từ sản phẩm hiện tại)
+  // Payload theo sample/doc.md: devices/{KeyLogin}/Transaction
   String currentProductGroup = "";
   if (productCode.length() > 0) {
-    // Tìm productGroup từ productsData
     JsonArray products = productsData.as<JsonArray>();
     for (JsonObject product : products) {
       if (product["code"] == productCode) {
@@ -92,50 +103,28 @@ void publishMQTT2OrderComplete() {
       }
     }
   }
-  doc["productGroup"] = currentProductGroup;
-  
-  // 3. productCode - Mã sản phẩm hiện tại
-  doc["productCode"] = productCode;
-  
-  // 4. batchName - Tên khách hàng
-  String currentBatchName = "";
-  if (orderCode.length() > 0) {
-    currentBatchName = orderCode;
-  } else if (customerName.length() > 0) {
-    currentBatchName = customerName;
+
+  String customerDisplayName = currentBatchName;
+  if (customerDisplayName.length() == 0) {
+    customerDisplayName = orderCode;
   }
-  doc["customerName"] = currentBatchName;
-  
-  // 5. customerName - SDT hiện tại
-  doc["customerPhone"] = customerName;
-  
-  // 6. startTime - Thời gian bắt đầu đếm
-  doc["startTime"] = startTimeStr;
-  
-  // 7. setMode - Chế độ hiển thị hiện tại (input/output)
-  doc["setMode"] = currentMode;
-  
-  // 8. location - Địa điểm đặt băng tải
-  doc["location"] = location;
 
-  // 9. target - Mục tiêu đếm hiện tại
-  doc["target"] = (int)targetCount;
-
-  // 10. count - Số lượng đã đếm được
-  doc["count"] = (long)totalCount;
-
-  // 11. băng tải
-  doc["conveyor"] = conveyorName;
-
-  // 12. thời gian sensor đo được cho bao/nhóm bao gần nhất
-  doc["sensorTimeMs"] = (long)lastMeasuredTime;
+  doc["Name"] = bagType;
+  doc["OrderCode"] = orderCode;
+  doc["ProductGroup"] = currentProductGroup;
+  doc["ProductCode"] = productCode;
+  doc["CustomerName"] = customerDisplayName;
+  doc["CustomerPhone"] = customerName;
+  doc["StartTime"] = startTimeStr;
+  doc["SetMode"] = currentMode;
+  doc["Location"] = location;
   
   // Serialize JSON
   String message;
   serializeJson(doc, message);
   
-  // Publish với QoS 1
-  bool published = mqtt2.publish(mqtt2_topic_transaction.c_str(), message.c_str(), 1);
+  // PubSubClient publish() dùng tham số thứ 3 là retained, không phải QoS.
+  bool published = mqtt2.publish(mqtt2_topic_transaction.c_str(), message.c_str());
   
   if (published) {
     Serial.println("MQTT2 Order Complete published successfully!");
