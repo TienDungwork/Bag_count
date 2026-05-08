@@ -2198,13 +2198,15 @@ function updateBatchPreview() {
       <td>${order.vehicleNumber}</td>
       <td>${productDisplay}</td>
       <td>${order.quantity}</td>
-      <td>
-        <button class="edit-btn" onclick="editBatchPreviewOrder(${index})" style="padding: 5px 10px; font-size: 12px;">
+      <td class="actions-cell">
+        <div class="table-action-buttons">
+        <button class="edit-btn" onclick="editBatchPreviewOrder(${index})" title="Sửa số lượng" aria-label="Sửa số lượng">
           <i class="fas fa-edit"></i>
         </button>
-        <button class="btn-danger" onclick="removeOrderFromBatch(${index})" style="padding: 5px 10px; font-size: 12px;">
+        <button class="delete-btn" onclick="removeOrderFromBatch(${index})" title="Xóa đơn hàng" aria-label="Xóa đơn hàng">
           <i class="fas fa-trash"></i>
         </button>
+        </div>
       </td>
     `;
     tbody.appendChild(row);
@@ -7595,26 +7597,9 @@ function editBatchPreviewOrder(index) {
 }
 
 function openEditOrderModal(order, index, source) {
-  updateAllProductSelects();
-
   document.getElementById('editOrderIndex').value = index;
   document.getElementById('editOrderSource').value = source;
-  document.getElementById('editCustomerName').value = order.customerName || '';
-  document.getElementById('editOrderCode').value = order.orderCode || '';
-  document.getElementById('editVehicleNumber').value = order.vehicleNumber || '';
   document.getElementById('editQuantity').value = order.quantity || '';
-  document.getElementById('editWarningQuantity').value = order.warningQuantity || '';
-
-  const productSelect = document.getElementById('editProductSelect');
-  if (productSelect) {
-    const matchedProduct = currentProducts.find(p =>
-      (order.product && order.product.id && p.id == order.product.id) ||
-      (order.productCode && p.code == order.productCode) ||
-      (order.product && order.product.code && p.code == order.product.code) ||
-      (order.productName && p.name == order.productName)
-    );
-    productSelect.value = matchedProduct ? matchedProduct.id : '';
-  }
 
   document.getElementById('editOrderModal').style.display = 'block';
 }
@@ -7626,35 +7611,16 @@ function closeEditOrderModal() {
 function saveEditOrder() {
   const index = parseInt(document.getElementById('editOrderIndex').value);
   const source = document.getElementById('editOrderSource').value || 'active';
-  const customerName = document.getElementById('editCustomerName').value.trim();
-  const orderCode = document.getElementById('editOrderCode').value.trim();
-  const vehicleNumber = document.getElementById('editVehicleNumber').value.trim();
-  const productId = document.getElementById('editProductSelect').value;
   const quantity = parseInt(document.getElementById('editQuantity').value);
-  const warningQuantity = parseInt(document.getElementById('editWarningQuantity').value) || 5;
   
-  if (!customerName || !orderCode || !vehicleNumber || !productId || !quantity || quantity < 1) {
-    showNotification('Vui lòng nhập đầy đủ thông tin đơn hàng hợp lệ', 'error');
-    return;
-  }
-
-  const product = currentProducts.find(p => p.id == productId);
-  if (!product) {
-    showNotification('Sản phẩm không hợp lệ', 'error');
+  if (!quantity || quantity < 1) {
+    showNotification('Vui lòng nhập số lượng hợp lệ', 'error');
     return;
   }
 
   const applyEdit = (oldOrder) => ({
     ...oldOrder,
-    customerName,
-    orderCode,
-    vehicleNumber,
-    product: { ...product },
-    productName: product.name,
-    productCode: product.code || '',
-    type: product.code || product.name || '',
     quantity,
-    warningQuantity,
     updatedAt: new Date().toISOString()
   });
 

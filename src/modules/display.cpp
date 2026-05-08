@@ -496,15 +496,14 @@ void updateDisplay() {
   dma_display->setCursor(x, y);
   dma_display->print(countStr);
   
-  // DÒNG 2: Hiển thị "XUẤT" hoặc "NHẬP" theo mode với số lượng đơn hàng hiện tại
+  // DÒNG 2: Hiển thị mode rút gọn với số lượng đơn hàng hiện tại
   String modeLabel;
   if (currentMode == "output") {
-    modeLabel = "XUẤT:";
+    modeLabel = "X:";
   } else {
-    modeLabel = "NHẬP:";
+    modeLabel = "N:";
   }
-  drawVietnameseText(1, 21, modeLabel, myCYAN, 1.5f);
-  drawVietnameseText(50, 21, String(targetCount), myCYAN, 1.5f);
+  drawVietnameseText(1, 16, modeLabel + String(targetCount), myCYAN, 2.0f);
   
   needUpdate = false;
 }
