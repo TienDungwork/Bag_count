@@ -536,7 +536,7 @@ void onRealtimeSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 void setupRealtimeServer();
 
 void handleRealtimeMessage(const String& topicStr, const String& message);
-void publishStatusMQTT();
+void publishStatusMQTT(bool force = false);
 void publishCountUpdate();
 void publishAlert(String alertType, String message);
 void publishSensorData();

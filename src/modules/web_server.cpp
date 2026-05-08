@@ -114,14 +114,17 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     
-    DynamicJsonDocument doc(768);
+    DynamicJsonDocument doc(1024);
     
     // TRẢ VỀ STATUS ĐÚNG THEO TRẠNG THÁI THỰC TẾ CỦA HỆ THỐNG
     String currentStatus = "WAIT";  // Default
     
-    // Nếu đang chạy thì trả về RUNNING
-    if (isRunning) {
+    if (qrProductMismatchActive || currentSystemStatus == "PRODUCT_MISMATCH") {
+      currentStatus = "PRODUCT_MISMATCH";
+    } else if (isRunning) {
       currentStatus = "RUNNING";
+    } else if (currentSystemStatus == "PAUSE" || currentSystemStatus == "RESET") {
+      currentStatus = currentSystemStatus;
     } else {
       // Kiểm tra status từ bagConfigs - lấy status đầu tiên khác WAIT
       for (auto& cfg : bagConfigs) {
@@ -154,6 +157,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["count"] = totalCount;
     doc["startTime"] = startTimeStr;
     doc["currentType"] = bagType;
+    doc["type"] = bagType;
+    doc["productCode"] = productCode;
     doc["target"] = targetCount;
     doc["isWarning"] = false;
     doc["timestamp"] = millis();
@@ -163,6 +168,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["currentMode"] = currentMode;
     doc["limitReached"] = isLimitReached;
     doc["currentTime"] = getTimeStr();
+    doc["qrMismatch"] = qrProductMismatchActive;
+    doc["qrLastCode"] = qrLastScannedCode;
+    doc["qrMismatchCode"] = qrMismatchScannedCode;
+    doc["qrExpectedCode"] = qrProductMismatchActive ? qrMismatchExpectedCode : currentExpectedQrProductCode();
     
     // Extended info
     doc["conveyorId"] = conveyorName;

@@ -65,10 +65,13 @@ void clearQrProductMismatch(const String& reason) {
   qrProductMismatchActive = false;
   qrMismatchScannedCode = "";
   qrMismatchExpectedCode = "";
+  if (!isRunning) {
+    currentSystemStatus = "PAUSE";
+  }
   digitalWrite(DONE_LED_PIN, LOW);
   updateDoneLED();
   publishAlert("QR_MATCH_RESTORED", reason.length() > 0 ? reason : "QR sản phẩm đã đúng mã hiện tại");
-  publishStatusMQTT();
+  publishStatusMQTT(true);
   needUpdate = true;
   Serial.println("QR mismatch alarm cleared: " + reason);
 }
@@ -96,7 +99,7 @@ static void stopForQrProductMismatch(const String& scannedCode, const String& ex
 
   String message = "Sai mã QR sản phẩm: đang chạy " + expectedCode + ", đọc được " + scannedCode;
   publishAlert("PRODUCT_MISMATCH", message);
-  publishStatusMQTT();
+  publishStatusMQTT(true);
   publishSensorData();
   Serial.println("QR PRODUCT MISMATCH - conveyor stopped, alarm ON. Expected=" + expectedCode + ", scanned=" + scannedCode);
 }

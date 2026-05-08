@@ -19,6 +19,7 @@ let countingState = {
   totalPlanned: 0,
   totalCounted: 0
 };
+let lastQrMismatchSignature = '';
 
 // Simple ID counters instead of timestamps
 let batchIdCounter = 1;
@@ -938,6 +939,58 @@ async function handleRealtimeMessage(topic, data) {
 }
 
 // Realtime message handlers
+async function stopCountingForQrMismatch(data) {
+  countingState.isActive = false;
+  updateButtonStates('stopped');
+
+  const activeBatch = orderBatches.find(b => b.isActive);
+  const deviceCount = Number(data.count || 0);
+  const incomingType = data.type || data.currentType || '';
+  const incomingCode = data.productCode || data.qrExpectedCode || '';
+  let changed = false;
+
+  if (activeBatch) {
+    let ordersToStop = activeBatch.orders.filter(order => order.selected && order.status === 'counting');
+
+    if (ordersToStop.length === 0) {
+      const matchedOrder = activeBatch.orders.find(order => {
+        if (!order.selected || order.status === 'completed') return false;
+        const orderProductName = order.product?.name || order.productName || '';
+        const orderProductCode = order.product?.code || order.productCode || '';
+        return (incomingCode && orderProductCode && incomingCode === orderProductCode) ||
+               (incomingType && (incomingType === orderProductName || incomingType === orderProductCode));
+      });
+      if (matchedOrder) {
+        ordersToStop = [matchedOrder];
+      }
+    }
+
+    ordersToStop.forEach(order => {
+      const safeCount = Math.max(getOrderSavedCount(order), deviceCount);
+      order.currentCount = safeCount;
+      order.executeCount = safeCount;
+      if (order.status !== 'stopped') {
+        order.status = 'stopped';
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      saveOrderBatches();
+      updateOrderTable();
+      await sendOrderBatchesToESP32();
+    }
+  }
+
+  updateOverview();
+
+  const signature = `${data.qrExpectedCode || ''}|${data.qrMismatchCode || data.qrLastCode || ''}`;
+  if (signature !== lastQrMismatchSignature) {
+    lastQrMismatchSignature = signature;
+    showNotification('Dừng băng tải do sai mã QR sản phẩm', 'error');
+  }
+}
+
 async function updateDeviceStatus(data) {
   currentDeviceStatus = { ...currentDeviceStatus, ...data };
   
@@ -965,6 +1018,7 @@ async function updateDeviceStatus(data) {
             }) ||
             selectedOrders.find(o => o.status === 'counting') ||
             selectedOrders.find(o => o.status === 'paused') ||
+            selectedOrders.find(o => o.status === 'stopped') ||
             selectedOrders.find(o => o.status === 'waiting');
           if (orderToStart) {
             orderToStart.status = 'counting';
@@ -976,6 +1030,9 @@ async function updateDeviceStatus(data) {
       }
       updateOverview();
       
+    } else if (data.status === 'PRODUCT_MISMATCH') {
+      await stopCountingForQrMismatch(data);
+
     } else if (data.status === 'PAUSE') {
       // console.log('IR Remote PAUSE detected - updating web state');
       countingState.isActive = false;
@@ -1004,7 +1061,7 @@ async function updateDeviceStatus(data) {
       
       const activeBatch = orderBatches.find(b => b.isActive);
       const hasPausedProgress = activeBatch && activeBatch.orders.some(order =>
-        order.selected && order.status === 'paused' && getOrderSavedCount(order) > 0
+        order.selected && (order.status === 'paused' || order.status === 'stopped') && getOrderSavedCount(order) > 0
       );
 
       // ESP32 cũng phát RESET khi hoàn thành hết các đơn đang chạy và dừng máy.
@@ -1497,9 +1554,9 @@ function restoreCountingState() {
     return;
   }
   
-  // Tìm đơn hàng đang counting hoặc paused
+  // Tìm đơn hàng đang counting hoặc đang dừng
   const countingOrders = activeBatch.orders.filter(o => o.status === 'counting');
-  const pausedOrders = activeBatch.orders.filter(o => o.status === 'paused');
+  const pausedOrders = activeBatch.orders.filter(o => o.status === 'paused' || o.status === 'stopped');
   
   if (countingOrders.length > 0) {
     console.log('Found orders in counting state, restoring counting mode...');
@@ -1518,8 +1575,8 @@ function restoreCountingState() {
     // Khôi phục trạng thái tạm dừng
     countingState.isActive = false;
     
-    // Cập nhật UI cho trạng thái tạm dừng
-    updateButtonStates('paused');
+    // Cập nhật UI cho trạng thái tạm dừng/dừng
+    updateButtonStates(pausedOrders.some(o => o.status === 'stopped') ? 'stopped' : 'paused');
     
     console.log('Paused state restored successfully');
     showNotification('Đã khôi phục trạng thái tạm dừng', 'info');
@@ -2705,7 +2762,7 @@ function updateOrderTable() {
       row.style.backgroundColor = '#e3f2fd';
       row.style.fontWeight = 'bold';
       row.style.border = '2px solid #2196f3';
-    } else if (order.status === 'paused') {
+    } else if (order.status === 'paused' || order.status === 'stopped') {
       row.style.backgroundColor = '#fff3e0';
     }
     
@@ -2861,6 +2918,7 @@ function getStatusDisplay(status) {
     case 'counting': return { icon: 'play', text: 'Đang đếm' };
     case 'completed': return { icon: 'check-circle', text: 'Hoàn thành' };
     case 'paused': return { icon: 'pause', text: 'Tạm dừng' };
+    case 'stopped': return { icon: 'stop', text: 'Dừng' };
     default: return { icon: 'clock', text: 'Chờ' };
   }
 }
@@ -2896,6 +2954,7 @@ function updateButtonStates(state) {
       resetBtn.disabled = false;
       break;
     case 'paused':
+    case 'stopped':
       pauseBtn.classList.add('dimmed');
       pauseBtn.disabled = true;
       startBtn.disabled = false;
@@ -2970,13 +3029,21 @@ async function startCounting() {
   
   if (currentOrderIndex === -1) {
     // CHƯA CÓ ĐƠN HÀNG NÀO ĐANG ĐẾM
-    // ƯU TIÊN chạy đơn waiting đã chọn trước, chỉ resume paused khi không còn waiting
-    currentOrderIndex = selectedOrders.findIndex(o => o.status === 'waiting');
+    currentOrderIndex = selectedOrders.findIndex(o => o.status === 'stopped');
+    if (currentOrderIndex !== -1) {
+      isResumeFromPaused = true;
+      console.log('Resuming from stopped order at index:', currentOrderIndex);
+    }
+
     if (currentOrderIndex === -1) {
-      currentOrderIndex = selectedOrders.findIndex(o => o.status === 'paused');
-      if (currentOrderIndex !== -1) {
-        isResumeFromPaused = true;
-        console.log('Resuming from paused order at index:', currentOrderIndex);
+      // ƯU TIÊN chạy đơn waiting đã chọn trước, chỉ resume paused khi không còn waiting
+      currentOrderIndex = selectedOrders.findIndex(o => o.status === 'waiting');
+      if (currentOrderIndex === -1) {
+        currentOrderIndex = selectedOrders.findIndex(o => o.status === 'paused');
+        if (currentOrderIndex !== -1) {
+          isResumeFromPaused = true;
+          console.log('Resuming from paused order at index:', currentOrderIndex);
+        }
       }
     }
     
@@ -3738,14 +3805,15 @@ function updateOverview() {
     updateButtonStates('started');
   } else {
     const hasCountingOrders = selectedOrders.some(o => o.status === 'counting');
-    const hasPausedOrders = selectedOrders.some(o => o.status === 'paused');
+    const hasPausedOrders = selectedOrders.some(o => o.status === 'paused' || o.status === 'stopped');
+    const hasStoppedOrders = selectedOrders.some(o => o.status === 'stopped');
     
     if (hasCountingOrders) {
       // Có đơn hàng đang đếm nhưng hệ thống không active - trạng thái started
       updateButtonStates('started');
     } else if (hasPausedOrders) {
       // Có đơn hàng bị tạm dừng - trạng thái paused
-      updateButtonStates('paused');
+      updateButtonStates(hasStoppedOrders ? 'stopped' : 'paused');
     } else {
       // Không có đơn hàng đang đếm - trạng thái reset
       updateButtonStates('reset');
@@ -4865,6 +4933,12 @@ async function updateStatusFromDevice(data) {
   // Kiểm tra xem có đang tạm tắt polling không
   if (disablePollingUntil > Date.now()) {
     console.log('⏸️ Status polling disabled, skipping update to avoid conflict');
+    return;
+  }
+
+  if (data.status === 'PRODUCT_MISMATCH') {
+    await stopCountingForQrMismatch(data);
+    updateDisplayElements(data);
     return;
   }
   
@@ -6114,6 +6188,10 @@ function startStatusPolling() {
           return;
         }
         
+        if (data.status && data.status !== lastStatus) {
+          await updateDeviceStatus(data);
+        }
+
         // Handle count updates
         if (data.count !== undefined && data.count !== lastCount) {
           console.log('Count update from ESP32:', lastCount, '→', data.count);

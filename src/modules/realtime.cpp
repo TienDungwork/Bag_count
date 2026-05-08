@@ -290,11 +290,11 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
   }
 }
 
-void publishStatusMQTT() {
+void publishStatusMQTT(bool force) {
   static unsigned long lastPublish = 0;
   
   // Debounce - chỉ publish mỗi 500ms
-  if (millis() - lastPublish < 500) {
+  if (!force && millis() - lastPublish < 500) {
     return;
   }
   lastPublish = millis();
