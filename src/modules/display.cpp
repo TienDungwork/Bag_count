@@ -365,6 +365,74 @@ static int utf8CharCount(const String& text) {
   return count;
 }
 
+static const int LED_PRODUCT_VISIBLE_CHARS = 7;
+static const int LED_PRODUCT_SCROLL_GAP_CHARS = 3;
+static const unsigned long LED_PRODUCT_SCROLL_STEP_MS = 350;
+
+static String currentLedProductText(bool& noOrder) {
+  String displayText;
+  noOrder = false;
+
+  if (hasDisplayValue(productCode)) {
+    displayText = productCode;
+  } else if (hasDisplayValue(bagType) && bagType != "MA SP") {
+    displayText = bagType;
+  } else {
+    displayText = "CHƯA CÓ ĐƠN";
+    noOrder = true;
+  }
+
+  return displayText;
+}
+
+static String scrollingWindowText(const String& text) {
+  static String lastText = "";
+  static int scrollOffset = 0;
+  static unsigned long lastStepMs = 0;
+
+  int charCount = utf8CharCount(text);
+  if (charCount <= LED_PRODUCT_VISIBLE_CHARS) {
+    lastText = text;
+    scrollOffset = 0;
+    lastStepMs = millis();
+    return text;
+  }
+
+  if (text != lastText) {
+    lastText = text;
+    scrollOffset = 0;
+    lastStepMs = millis();
+  }
+
+  unsigned long now = millis();
+  if (now - lastStepMs >= LED_PRODUCT_SCROLL_STEP_MS) {
+    lastStepMs = now;
+    int cycleChars = charCount + LED_PRODUCT_SCROLL_GAP_CHARS;
+    scrollOffset = (scrollOffset + 1) % cycleChars;
+  }
+
+  String padded = text;
+  for (int i = 0; i < LED_PRODUCT_SCROLL_GAP_CHARS; i++) {
+    padded += " ";
+  }
+
+  int cycleChars = charCount + LED_PRODUCT_SCROLL_GAP_CHARS;
+  String out = "";
+  for (int i = 0; i < LED_PRODUCT_VISIBLE_CHARS; i++) {
+    int index = (scrollOffset + i) % cycleChars;
+    out += utf8SliceChars(padded, index, 1);
+  }
+  return out;
+}
+
+bool displayNeedsFastRefresh() {
+  if (!systemConnected || showNetworkIp || isLimitReached) return false;
+
+  bool noOrder = false;
+  String displayText = currentLedProductText(noOrder);
+  return !noOrder && utf8CharCount(displayText) > LED_PRODUCT_VISIBLE_CHARS;
+}
+
 //----------------------------------------Display Functions
 void updateDisplay() {
   // Kiểm tra dma_display có khả dụng không
@@ -401,29 +469,13 @@ void updateDisplay() {
   // │ XUAT: 100           │   (màu đỏ)   │
   // └─────────────────────┴──────────────┘
   
-  String displayText;
   bool noOrder = false;
-  if (hasDisplayValue(productCode)) {
-    displayText = productCode;
-  } else if (hasDisplayValue(bagType) && bagType != "MA SP") {
-    displayText = bagType;
-  } else {
-    displayText = "CHƯA CÓ ĐƠN";
-    noOrder = true;
-  }
+  String displayText = currentLedProductText(noOrder);
 
   if (noOrder) {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
-    int maxCodeLen = 12;
-    if (utf8CharCount(displayText) > maxCodeLen) {
-      String line1 = utf8SliceChars(displayText, 0, maxCodeLen);
-      String line2 = utf8SliceChars(displayText, maxCodeLen, maxCodeLen);
-      drawVietnameseText(1, 5, line1, myYELLOW, 1.0f);
-      drawVietnameseText(1, 14, line2, myYELLOW, 1.0f);
-    } else {
-      drawVietnameseText(1, 5, displayText, myYELLOW, 1.0f);
-    }
+    drawVietnameseText(1, 5, scrollingWindowText(displayText), myYELLOW, 1.0f);
   }
 
   // SỐ ĐẾM LỚN BÊN PHẢI DÒNG 1 (Size 3, màu đỏ)

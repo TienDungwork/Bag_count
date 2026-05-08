@@ -547,6 +547,7 @@ void publishBagConfigs();
 void setupWebServer();
 
 void updateDisplay();
+bool displayNeedsFastRefresh();
 void displayCurrentOrderInfo();
 void showConnectingDisplay();
 void showNetworkIpDisplay();

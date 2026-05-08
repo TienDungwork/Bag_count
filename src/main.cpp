@@ -297,7 +297,8 @@ void loop() {
   // bag count events occur.
   updateDoneLED();
   // Update LED display LUÔN LUÔN nếu cần thiết
-  if (needUpdate || (millis() - lastUpdate > 1000)) { // Update mỗi 1 giây thay vì 2 giây
+  unsigned long displayInterval = displayNeedsFastRefresh() ? 350 : 1000;
+  if (needUpdate || (millis() - lastUpdate > displayInterval)) {
     updateDisplay();
     updateStartLED();  // Luôn cập nhật đèn START
     lastUpdate = millis();
