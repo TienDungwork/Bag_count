@@ -862,6 +862,15 @@ body {
   text-align: center;
 }
 
+.order-list-section .order-table th:nth-child(8),
+.order-list-section .order-table td:nth-child(8),
+.batch-preview .order-table th:nth-child(7),
+.batch-preview .order-table td:nth-child(7) {
+  width: 82px;
+  min-width: 82px;
+  white-space: nowrap;
+}
+
 /* Order Status Styles - Simplified */
 .order-table tbody tr.waiting {
   background: #fff3cd;

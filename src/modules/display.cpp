@@ -425,6 +425,68 @@ static String scrollingWindowText(const String& text) {
   return out;
 }
 
+static uint8_t sevenSegmentMask(char digit) {
+  switch (digit) {
+    case '0': return 0b0111111;
+    case '1': return 0b0000110;
+    case '2': return 0b1011011;
+    case '3': return 0b1001111;
+    case '4': return 0b1100110;
+    case '5': return 0b1101101;
+    case '6': return 0b1111101;
+    case '7': return 0b0000111;
+    case '8': return 0b1111111;
+    case '9': return 0b1101111;
+  }
+  return 0;
+}
+
+static void drawSevenSegmentDigit(int x, int y, int w, int h, int t, char digit, uint16_t color) {
+  if (!dma_display) return;
+
+  uint8_t mask = sevenSegmentMask(digit);
+  int midY = y + h / 2 - t / 2;
+  int upperH = midY - (y + t);
+  int lowerY = midY + t;
+  int lowerH = y + h - t - lowerY;
+
+  if (mask & 0b0000001) dma_display->fillRect(x + t, y, w - 2 * t, t, color);                 // A
+  if (mask & 0b0000010) dma_display->fillRect(x + w - t, y + t, t, upperH, color);             // B
+  if (mask & 0b0000100) dma_display->fillRect(x + w - t, lowerY, t, lowerH, color);            // C
+  if (mask & 0b0001000) dma_display->fillRect(x + t, y + h - t, w - 2 * t, t, color);          // D
+  if (mask & 0b0010000) dma_display->fillRect(x, lowerY, t, lowerH, color);                    // E
+  if (mask & 0b0100000) dma_display->fillRect(x, y + t, t, upperH, color);                     // F
+  if (mask & 0b1000000) dma_display->fillRect(x + t, midY, w - 2 * t, t, color);               // G
+}
+
+static void drawSevenSegmentNumberRight(int rightX, int y, const String& number, uint16_t color) {
+  if (!dma_display) return;
+
+  int digits = std::max(1, (int)number.length());
+  int digitW = 15;
+  int digitH = 28;
+  int thickness = 3;
+  int gap = 2;
+
+  if (digits >= 5) {
+    digitW = 12;
+    digitH = 25;
+    thickness = 2;
+    gap = 1;
+    y += 2;
+  }
+
+  int totalW = digits * digitW + (digits - 1) * gap;
+  int x = std::max(0, rightX - totalW);
+
+  for (int i = 0; i < digits; i++) {
+    char c = number[i];
+    if (c >= '0' && c <= '9') {
+      drawSevenSegmentDigit(x + i * (digitW + gap), y, digitW, digitH, thickness, c, color);
+    }
+  }
+}
+
 bool displayNeedsFastRefresh() {
   if (!systemConnected || showNetworkIp || isLimitReached) return false;
 
@@ -478,23 +540,10 @@ void updateDisplay() {
     drawVietnameseText(1, 5, scrollingWindowText(displayText), myYELLOW, 1.0f);
   }
 
-  // SỐ ĐẾM LỚN BÊN PHẢI DÒNG 1 (Size 3, màu đỏ)
+  // SỐ ĐẾM LỚN BÊN PHẢI: kiểu LED 7 đoạn, đủ chỗ cho 4 chữ số.
   String countStr = String((int)totalCount);
-  dma_display->setTextSize(4);
-  dma_display->setTextColor(myGREEN);
-  
-  // Tính toán vị trí căn phải
-  int16_t x1, y1;
-  uint16_t w, h;
-  dma_display->getTextBounds(countStr, 0, 0, &x1, &y1, &w, &h);
-  
-  // Đặt ở bên phải màn hình
   int totalWidth = PANEL_RES_X * PANEL_CHAIN;
-  int x = totalWidth - w;  // 2 pixel margin từ bên phải
-  int y = 2;  // Căn với dòng 1
-  
-  dma_display->setCursor(x, y);
-  dma_display->print(countStr);
+  drawSevenSegmentNumberRight(totalWidth - 1, 2, countStr, myGREEN);
   
   // DÒNG 2: Hiển thị mode rút gọn với số lượng đơn hàng hiện tại
   String modeLabel;

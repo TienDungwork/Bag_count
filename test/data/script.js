@@ -2803,7 +2803,8 @@ function updateOrderTable() {
           ${order.status === 'counting' && order.currentCount ? ` (${order.currentCount}/${order.quantity})` : ''}
         </span>
       </td>
-      <td>
+      <td class="actions-cell">
+        <div class="table-action-buttons">
         <button class="edit-btn" onclick="editOrderById(${order.id})" 
                 ${order.status === 'counting' && order.currentCount < order.quantity ? 'disabled' : ''}>
           <i class="fas fa-edit"></i>
@@ -2812,6 +2813,7 @@ function updateOrderTable() {
                 ${order.status === 'completed' ? '' : ''}>
           <i class="fas fa-trash"></i>
         </button>
+        </div>
       </td>
     `;
     
