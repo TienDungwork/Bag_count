@@ -444,6 +444,19 @@ static uint8_t sevenSegmentMask(char digit) {
 static void drawSevenSegmentDigit(int x, int y, int w, int h, int t, char digit, uint16_t color) {
   if (!dma_display) return;
 
+  if (digit == '1') {
+    dma_display->fillRect(x + w - t, y, t, h, color);
+    return;
+  }
+
+  if (digit == '4') {
+    int midY = y + h / 2 - t / 2;
+    dma_display->fillRect(x, y, t, midY + t - y, color);
+    dma_display->fillRect(x + w - t, y, t, h, color);
+    dma_display->fillRect(x + t, midY, w - 2 * t, t, color);
+    return;
+  }
+
   uint8_t mask = sevenSegmentMask(digit);
   int midY = y + h / 2 - t / 2;
   int upperH = midY - (y + t);

@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Khôi phục trạng thái đếm nếu có đơn hàng đang counting
   restoreCountingState();
+  await refreshStatusFromDevice('startup');
   
   // Cập nhật overview sau khi restore state
   updateOverview();
@@ -236,11 +237,6 @@ async function loadAllDataFromESP32() {
     await loadHistoryFromESP32();
     
     console.log('All data loaded from ESP32 successfully');
-    
-    // Force sync lại toàn bộ data để đảm bảo ESP32 có data mới nhất
-    setTimeout(() => {
-      sendOrderBatchesToESP32();
-    }, 1000);
     
     // showNotification('Đã tải dữ liệu từ ESP32', 'success');
     
@@ -1932,7 +1928,8 @@ function createNewBatch() {
   updateBatchPreview();
 }
 
-function loadBatch() {
+function loadBatch(options = {}) {
+  const syncDevice = options.syncDevice !== false;
   console.log('loadBatch() called');
   const select = document.getElementById('currentBatchSelect');
   const batchId = select ? select.value : '';
@@ -2022,8 +2019,11 @@ function loadBatch() {
       // Cập nhật dropdown sản phẩm
       updateAllProductSelects();
       
-      // GỬI THÔNG TIN BATCH LÊN ESP32 KHI CHỌN
-      activateBatchOnESP32(batch);
+      // Chỉ gửi lệnh kích hoạt khi người dùng chủ động chọn/sửa batch.
+      // Auto-load khi mở trang/client mới chỉ được đọc dữ liệu để tránh reset thiết bị đang đếm.
+      if (syncDevice) {
+        activateBatchOnESP32(batch);
+      }
     }
   }
 }
@@ -2198,8 +2198,8 @@ function updateBatchPreview() {
       <td>${order.vehicleNumber}</td>
       <td>${productDisplay}</td>
       <td>${order.quantity}</td>
-      <td class="actions-cell">
-        <div class="table-action-buttons">
+      <td class="actions-cell" style="white-space: nowrap; min-width: 82px;">
+        <div class="table-action-buttons" style="display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;">
         <button class="edit-btn" onclick="editBatchPreviewOrder(${index})" title="Sửa số lượng" aria-label="Sửa số lượng">
           <i class="fas fa-edit"></i>
         </button>
@@ -2554,7 +2554,7 @@ function updateCurrentBatchSelect() {
     if (!hasAutoLoadedCurrentBatch && select.value && (!currentBatchId || currentOrderBatch.length === 0)) {
       hasAutoLoadedCurrentBatch = true;
       setTimeout(() => {
-        loadBatch();
+        loadBatch({ syncDevice: false });
       }, 0);
     }
   }
@@ -2803,8 +2803,8 @@ function updateOrderTable() {
           ${order.status === 'counting' && order.currentCount ? ` (${order.currentCount}/${order.quantity})` : ''}
         </span>
       </td>
-      <td class="actions-cell">
-        <div class="table-action-buttons">
+      <td class="actions-cell" style="white-space: nowrap; min-width: 82px;">
+        <div class="table-action-buttons" style="display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;">
         <button class="edit-btn" onclick="editOrderById(${order.id})" 
                 ${order.status === 'counting' && order.currentCount < order.quantity ? 'disabled' : ''}>
           <i class="fas fa-edit"></i>
@@ -4914,6 +4914,9 @@ async function refreshStatusFromDevice(source = 'manual') {
   lastHeartbeat = Date.now();
   deviceConnected = true;
   updateDeviceConnectionStatus(true);
+  await updateDeviceStatus(data);
+  await updateStatusFromDevice(data);
+  updateDisplayElements(data);
 
   console.log(`Status refreshed from ESP32 (${source}):`, data);
 }
