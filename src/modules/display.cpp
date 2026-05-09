@@ -368,7 +368,7 @@ static int utf8CharCount(const String& text) {
 static const int LED_PRODUCT_VISIBLE_CHARS = 7;
 static const int LED_PRODUCT_SCROLL_GAP_CHARS = 3;
 static const unsigned long LED_PRODUCT_SCROLL_STEP_MS = 350;
-static const unsigned long LED_TARGET_TOGGLE_MS = 1000;
+static const unsigned long LED_TARGET_TOGGLE_MS = 3000;
 
 static String currentLedProductText(bool& noOrder) {
   String displayText;
