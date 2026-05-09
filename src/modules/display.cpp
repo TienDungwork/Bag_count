@@ -368,6 +368,7 @@ static int utf8CharCount(const String& text) {
 static const int LED_PRODUCT_VISIBLE_CHARS = 7;
 static const int LED_PRODUCT_SCROLL_GAP_CHARS = 3;
 static const unsigned long LED_PRODUCT_SCROLL_STEP_MS = 350;
+static const unsigned long LED_TARGET_TOGGLE_MS = 1000;
 
 static String currentLedProductText(bool& noOrder) {
   String displayText;
@@ -558,14 +559,15 @@ void updateDisplay() {
   int totalWidth = PANEL_RES_X * PANEL_CHAIN;
   drawSevenSegmentNumberRight(totalWidth - 1, 2, countStr, myGREEN);
   
-  // DÒNG 2: Hiển thị mode rút gọn với số lượng đơn hàng hiện tại
+  // DÒNG 2: Luân phiên hiển thị mode rồi target để tránh chèn sang số đếm.
   String modeLabel;
   if (currentMode == "output") {
-    modeLabel = "X:";
+    modeLabel = "X";
   } else {
-    modeLabel = "N:";
+    modeLabel = "N";
   }
-  drawVietnameseText(1, 16, modeLabel + String(targetCount), myCYAN, 2.0f);
+  bool showTarget = ((millis() / LED_TARGET_TOGGLE_MS) % 2) == 1;
+  drawVietnameseText(1, 16, showTarget ? String(targetCount) : modeLabel, myCYAN, 2.0f);
   
   needUpdate = false;
 }
