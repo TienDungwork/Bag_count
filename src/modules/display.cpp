@@ -562,9 +562,9 @@ void updateDisplay() {
   // DÒNG 2: Luân phiên hiển thị mode rồi target để tránh chèn sang số đếm.
   String modeLabel;
   if (currentMode == "output") {
-    modeLabel = "X";
+    modeLabel = "XUAT";
   } else {
-    modeLabel = "N";
+    modeLabel = "NHAP";
   }
   bool showTarget = ((millis() / LED_TARGET_TOGGLE_MS) % 2) == 1;
   drawVietnameseText(1, 16, showTarget ? String(targetCount) : modeLabel, myCYAN, 2.0f);

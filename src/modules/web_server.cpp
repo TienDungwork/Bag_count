@@ -1,4 +1,111 @@
 #include "web_server.h"
+#include <Update.h>
+
+static bool otaUploadSawFile = false;
+static bool otaUploadSuccess = false;
+static String otaUploadError = "";
+
+static String otaPageHtml(const String& message = "", bool isError = false) {
+  String html;
+  html.reserve(3600);
+  html += "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>";
+  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<title>OTA Firmware Update</title>";
+  html += "<style>";
+  html += "body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:24px;color:#1f2937}";
+  html += ".box{max-width:560px;margin:40px auto;background:#fff;border:1px solid #d7dde5;border-radius:8px;padding:24px;box-shadow:0 10px 28px rgba(0,0,0,.08)}";
+  html += "h1{font-size:22px;margin:0 0 12px}.note{font-size:14px;color:#5b6472;line-height:1.5;margin-bottom:18px}";
+  html += ".msg{padding:12px;border-radius:6px;margin:12px 0;font-weight:600}.ok{background:#dcfce7;color:#166534;border:1px solid #86efac}.err{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}";
+  html += "input[type=file]{display:block;width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;margin:14px 0}";
+  html += "button{width:100%;border:0;border-radius:6px;background:#2563eb;color:white;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer}";
+  html += "button:hover{background:#1d4ed8}.meta{margin-top:16px;font-size:12px;color:#6b7280}";
+  html += "</style></head><body><div class='box'>";
+  html += "<h1>Cap nhat firmware OTA</h1>";
+  html += "<div class='note'>Chon file firmware <b>.bin</b> da build cho dung thiet bi. Sau khi upload thanh cong, thiet bi se tu khoi dong lai.</div>";
+  if (message.length() > 0) {
+    html += "<div class='msg ";
+    html += isError ? "err" : "ok";
+    html += "'>";
+    html += message;
+    html += "</div>";
+  }
+  html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
+  html += "<input type='file' name='firmware' accept='.bin,application/octet-stream' required>";
+  html += "<button type='submit'>Upload firmware</button>";
+  html += "</form>";
+  html += "<div class='meta'>Duong dan: /update. Trang nay khong nam trong giao dien nguoi dung hien tai.</div>";
+  html += "</div></body></html>";
+  return html;
+}
+
+static void handleOtaUpdatePage() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.send(200, "text/html", otaPageHtml());
+}
+
+static void handleOtaUploadChunk() {
+  HTTPUpload& upload = server.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    otaUploadSawFile = true;
+    otaUploadSuccess = false;
+    otaUploadError = "";
+    Serial.println("[OTA] Upload start: " + upload.filename);
+
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+      otaUploadError = Update.errorString();
+      Serial.println("[OTA] Update.begin failed: " + otaUploadError);
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (otaUploadError.length() > 0) return;
+
+    size_t written = Update.write(upload.buf, upload.currentSize);
+    if (written != upload.currentSize) {
+      otaUploadError = Update.errorString();
+      Serial.println("[OTA] Update.write failed: " + otaUploadError);
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (otaUploadError.length() > 0) return;
+
+    if (!Update.end(true)) {
+      otaUploadError = Update.errorString();
+      Serial.println("[OTA] Update.end failed: " + otaUploadError);
+      return;
+    }
+
+    otaUploadSuccess = true;
+    Serial.printf("[OTA] Upload success: %u bytes\n", upload.totalSize);
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    otaUploadError = "Upload aborted";
+    Update.abort();
+    Serial.println("[OTA] Upload aborted");
+  }
+}
+
+static void handleOtaUploadDone() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+
+  if (!otaUploadSawFile) {
+    server.send(400, "text/html", otaPageHtml("Chua chon file firmware.", true));
+    return;
+  }
+
+  if (!otaUploadSuccess || otaUploadError.length() > 0) {
+    String message = otaUploadError.length() > 0 ? otaUploadError : "OTA upload failed.";
+    otaUploadSawFile = false;
+    otaUploadSuccess = false;
+    otaUploadError = "";
+    server.send(500, "text/html", otaPageHtml(message, true));
+    return;
+  }
+
+  otaUploadSawFile = false;
+  otaUploadSuccess = false;
+  otaUploadError = "";
+  server.send(200, "text/html", otaPageHtml("Upload thanh cong. Thiet bi dang khoi dong lai...", false));
+  delay(500);
+  ESP.restart();
+}
 
 //----------------------------------------Web server API
 void setupWebServer() {
@@ -3018,6 +3125,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     
     server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Settings refreshed from file\"}");
   });
+
+  // OTA firmware upload - truy cập trực tiếp http://<IP>/update, không đưa vào UI chính.
+  server.on("/update", HTTP_GET, handleOtaUpdatePage);
+  server.on("/update", HTTP_POST, handleOtaUploadDone, handleOtaUploadChunk);
   
   // Catch-all handler cho bất kỳ domain nào khác
   server.onNotFound([](){

@@ -109,15 +109,18 @@ void publishMQTT2OrderComplete() {
     customerDisplayName = orderCode;
   }
 
-  doc["Name"] = bagType;
+  doc["Name"] = customerDisplayName;
   doc["OrderCode"] = orderCode;
+  doc["ProductName"] = bagType;
   doc["ProductGroup"] = currentProductGroup;
   doc["ProductCode"] = productCode;
   doc["CustomerName"] = customerDisplayName;
   doc["CustomerPhone"] = customerName;
   doc["StartTime"] = startTimeStr;
-  doc["SetMode"] = currentMode;
+  doc["SetMode"] = currentMode == "input" ? 1 : 2;
   doc["Location"] = location;
+  doc["PlannedCount"] = (int)targetCount;
+  doc["ActualCount"] = (long)totalCount;
   
   // Serialize JSON
   String message;

@@ -126,14 +126,17 @@ Nội dung trong Topic có dạng:
 
 ```json
 {
-  "Name":"",
-  "OrderCode":"",
-  "ProductGroup":"",
-  "ProductCode":"",
-  "CustomerName":"",
-  "CustomerPhone":"",
-  "StartTime":"",
-  "SetMode":"",
-  "Location":"",
+  "Name":[string], // tên lệnh
+  "OrderCode":[string], // mã lệnh
+  "ProductName":[string] // tên sản phẩm
+  "ProductGroup":[string], // nhóm sản phẩm
+  "ProductCode":[string], // mã sản phẩm
+  "CustomerName":[string], // tên khách hàng
+  "CustomerPhone":[string], // số điện thoại khách hàng
+  "StartTime":[string], // thời điểm bắt đầu cân// thời điểm bắt đầu cân
+  "SetMode":1 là inout 2 là output ( enum), // chế độ
+  "Location":[string], // vị trí
+  "PlannedCount": [int] //số lượng đếm theo kế hoạch
+  "ActualCount": [int] // số lượng đếm thực tế
 }
 ```
