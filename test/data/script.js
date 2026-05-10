@@ -491,7 +491,7 @@ async function debugESP32Settings() {
       const fileExists = debugData.files?.settings_exists || false;
       const memorySettings = debugData.memory || {};
       
-      alert(`ESP32 Settings Debug:\n\nFile exists: ${fileExists}\nConveyor: ${memorySettings.conveyorName || 'N/A'}\nBrightness: ${memorySettings.brightness || 'N/A'}%\nSensor Delay: ${memorySettings.sensorDelay || 'N/A'}ms\n\nCheck console (F12) for full details`);
+      alert(`Debug cài đặt thiết bị:\n\nFile exists: ${fileExists}\nConveyor: ${memorySettings.conveyorName || 'N/A'}\nBrightness: ${memorySettings.brightness || 'N/A'}%\nSensor Delay: ${memorySettings.sensorDelay || 'N/A'}ms\n\nCheck console (F12) for full details`);
       
     } else {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2125,7 +2125,7 @@ function addOrderToBatch() {
   quantities.forEach(input => input.value = '');
   warnings.forEach(input => input.value = '');
   
-  showNotification('Thêm đơn hàng vào danh sách thành công và gửi đến ESP32', 'success');
+  showNotification('Thêm đơn hàng vào danh sách thành công và gửi đến thiết bị', 'success');
 }
 
 function removeOrderFromBatch(index) {
@@ -2266,7 +2266,7 @@ async function saveBatch() {
   
   // KIỂM TRA GIỚI HẠN SỐ LƯỢNG ĐƠN HÀNG
   if (currentOrderBatch.length > 20) {
-    if (!confirm(`Danh sách có ${currentOrderBatch.length} đơn hàng. ESP32 có thể không xử lý được quá nhiều đơn hàng cùng lúc. Bạn có muốn tiếp tục?`)) {
+    if (!confirm(`Danh sách có ${currentOrderBatch.length} đơn hàng. Thiết bị có thể không xử lý được quá nhiều đơn hàng cùng lúc. Bạn có muốn tiếp tục?`)) {
       return;
     }
   }
@@ -5958,9 +5958,14 @@ async function getDeviceInfo() {
       if (deviceCodeField) {
         let macInfo = deviceInfo.deviceMAC || 'N/A';
         if (deviceInfo.activeInterface === "Ethernet (W5500)" && deviceInfo.ethernetMAC) {
-          macInfo = `ESP32: ${deviceInfo.deviceMAC} | Ethernet: ${deviceInfo.ethernetMAC}`;
+          macInfo = `${deviceInfo.deviceMAC} | Ethernet: ${deviceInfo.ethernetMAC}`;
         }
         deviceCodeField.value = macInfo;
+      }
+
+      const firmwareVersionField = document.getElementById('firmwareVersion');
+      if (firmwareVersionField) {
+        firmwareVersionField.value = deviceInfo.firmwareVersion || 'N/A';
       }
       
       const realtimeEndpointField = document.getElementById('realtimeEndpoint');
@@ -5986,10 +5991,14 @@ async function getDeviceInfo() {
     
     // Set default values when API fails
     const deviceCodeField = document.getElementById('deviceCode');
+    const firmwareVersionField = document.getElementById('firmwareVersion');
     const realtimeEndpointField = document.getElementById('realtimeEndpoint');
     
     if (deviceCodeField) {
       deviceCodeField.value = 'API không khả dụng - Vui lòng kiểm tra kết nối';
+    }
+    if (firmwareVersionField) {
+      firmwareVersionField.value = 'Không khả dụng';
     }
     if (realtimeEndpointField) {
       realtimeEndpointField.value = `ws://${window.location.hostname}:${REALTIME_WS_PORT}${REALTIME_WS_PATH}`;
@@ -7023,7 +7032,7 @@ function testSetProduct() {
     });
   }).then(() => {
     console.log('Test batch_info sent successfully');
-    alert(`Test completed! Sent "${randomProduct.name}" with target ${randomProduct.target} to ESP32. Check ESP32 Serial Monitor.`);
+    alert(`Test hoàn tất! Đã gửi "${randomProduct.name}" với target ${randomProduct.target} đến thiết bị. Kiểm tra Serial Monitor.`);
   }).catch(error => {
     console.error('Test failed:', error);
     alert('Test failed: ' + error.message);

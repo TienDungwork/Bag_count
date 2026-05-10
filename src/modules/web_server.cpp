@@ -1,6 +1,10 @@
 #include "web_server.h"
 #include <Update.h>
 
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "1.0.0"
+#endif
+
 static bool otaUploadSawFile = false;
 static bool otaUploadSuccess = false;
 static String otaUploadError = "";
@@ -10,7 +14,7 @@ static String otaPageHtml(const String& message = "", bool isError = false) {
   html.reserve(3600);
   html += "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<title>OTA Firmware Update</title>";
+  html += "<title>Cập nhật firmware</title>";
   html += "<style>";
   html += "body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:24px;color:#1f2937}";
   html += ".box{max-width:560px;margin:40px auto;background:#fff;border:1px solid #d7dde5;border-radius:8px;padding:24px;box-shadow:0 10px 28px rgba(0,0,0,.08)}";
@@ -18,10 +22,10 @@ static String otaPageHtml(const String& message = "", bool isError = false) {
   html += ".msg{padding:12px;border-radius:6px;margin:12px 0;font-weight:600}.ok{background:#dcfce7;color:#166534;border:1px solid #86efac}.err{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}";
   html += "input[type=file]{display:block;width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;margin:14px 0}";
   html += "button{width:100%;border:0;border-radius:6px;background:#2563eb;color:white;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer}";
-  html += "button:hover{background:#1d4ed8}.meta{margin-top:16px;font-size:12px;color:#6b7280}";
+  html += "button:hover{background:#1d4ed8}";
   html += "</style></head><body><div class='box'>";
-  html += "<h1>Cap nhat firmware OTA</h1>";
-  html += "<div class='note'>Chon file firmware <b>.bin</b> da build cho dung thiet bi. Sau khi upload thanh cong, thiet bi se tu khoi dong lai.</div>";
+  html += "<h1>Cập nhật firmware OTA</h1>";
+  html += "<div class='note'>Chọn file firmware <b>.bin</b> đã build cho đúng thiết bị. Sau khi upload thành công, thiết bị sẽ tự khởi động lại.</div>";
   if (message.length() > 0) {
     html += "<div class='msg ";
     html += isError ? "err" : "ok";
@@ -31,9 +35,8 @@ static String otaPageHtml(const String& message = "", bool isError = false) {
   }
   html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
   html += "<input type='file' name='firmware' accept='.bin,application/octet-stream' required>";
-  html += "<button type='submit'>Upload firmware</button>";
+  html += "<button type='submit'>Tải firmware lên</button>";
   html += "</form>";
-  html += "<div class='meta'>Duong dan: /update. Trang nay khong nam trong giao dien nguoi dung hien tai.</div>";
   html += "</div></body></html>";
   return html;
 }
@@ -86,12 +89,12 @@ static void handleOtaUploadDone() {
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
   if (!otaUploadSawFile) {
-    server.send(400, "text/html", otaPageHtml("Chua chon file firmware.", true));
+    server.send(400, "text/html", otaPageHtml("Chưa chọn file firmware.", true));
     return;
   }
 
   if (!otaUploadSuccess || otaUploadError.length() > 0) {
-    String message = otaUploadError.length() > 0 ? otaUploadError : "OTA upload failed.";
+    String message = otaUploadError.length() > 0 ? otaUploadError : "Không cập nhật được firmware.";
     otaUploadSawFile = false;
     otaUploadSuccess = false;
     otaUploadError = "";
@@ -102,7 +105,7 @@ static void handleOtaUploadDone() {
   otaUploadSawFile = false;
   otaUploadSuccess = false;
   otaUploadError = "";
-  server.send(200, "text/html", otaPageHtml("Upload thanh cong. Thiet bi dang khoi dong lai...", false));
+  server.send(200, "text/html", otaPageHtml("Upload thành công. Thiết bị đang khởi động lại...", false));
   delay(500);
   ESP.restart();
 }
@@ -995,7 +998,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       } else if (cmd == "ping") {
         // LỆNH PING ĐỂ TEST CONNECTIVITY
         Serial.println("Ping command received from web");
-        server.send(200, "text/plain", "PONG - ESP32 is alive!");
+        server.send(200, "text/plain", "PONG - device is alive!");
         return;
       } else if (cmd == "test") {
         // LỆNH TEST ĐỂ DEBUG COMMUNICATION
@@ -1410,7 +1413,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       saveBagConfigsToFile();
       
       Serial.println("Order deleted: " + orderCode);
-      server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Order deleted from ESP32\"}");
+      server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Order deleted from device\"}");
     } else {
       server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"Missing order code\"}");
     }
@@ -1534,7 +1537,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       // Check memory after processing
       Serial.println("Free heap after processing: " + String(ESP.getFreeHeap()) + " bytes");
       
-      server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Order saved to ESP32\"}");
+      server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"Order saved to device\"}");
     } else {
       server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"No data provided\"}");
     }
@@ -2190,13 +2193,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     Serial.println("Network status API - response length: " + String(response.length()));
   });
 
-  // API restart ESP32 để áp dụng cấu hình IP mới
+  // API restart để áp dụng cấu hình IP mới
   server.on("/api/restart", HTTP_POST, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
     DynamicJsonDocument doc(256);
     doc["status"] = "OK";
-    doc["message"] = "ESP32 will restart in 2 seconds";
+    doc["message"] = "Thiết bị sẽ khởi động lại sau 2 giây";
     
     String out;
     serializeJson(doc, out);
@@ -3216,11 +3219,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                           (currentNetworkMode == WIFI_AP_MODE ? WiFi.softAPIP().toString() : WiFi.localIP().toString());
     String realtimeEndpoint = "ws://" + realtimeHost + ":" + String(REALTIME_WS_PORT) + "/ws";
     
-    doc["deviceMAC"] = macAddress;  // ESP32 WiFi MAC (unique)
+    doc["deviceMAC"] = macAddress;  // WiFi MAC (unique)
     doc["ethernetMAC"] = ethernetMAC;  // W5500 Ethernet MAC (fixed)
     doc["realtimeEndpoint"] = realtimeEndpoint;
     doc["conveyorName"] = conveyorName;
-    doc["firmwareVersion"] = "1.0.0";
+    doc["firmwareVersion"] = FIRMWARE_VERSION;
     doc["networkMode"] = (currentNetworkMode == ETHERNET_MODE) ? "Ethernet" : 
                         (currentNetworkMode == WIFI_STA_MODE) ? "WiFi_STA" : "WiFi_AP";
     doc["ipAddress"] = (currentNetworkMode == ETHERNET_MODE) ? local_IP.toString() : WiFi.localIP().toString();
