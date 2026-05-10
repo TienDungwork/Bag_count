@@ -3146,6 +3146,13 @@ input[type="checkbox"] {
   min-width: 82px;
 }
 
+.product-table td.actions-cell {
+  text-align: center !important;
+  white-space: nowrap !important;
+  min-width: 82px;
+  width: 82px;
+}
+
 /* Responsive Modal */
 @media (max-width: 768px) {
   .modal-content {

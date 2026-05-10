@@ -3592,13 +3592,15 @@ function updateProductGroupTable() {
       <td>${index + 1}</td>
       <td>${groupName}</td>
       <td>${countProductsInGroup(groupName)}</td>
-      <td>
-        <button class="edit-btn" onclick="editProductGroup(${groupArg})">
+      <td class="actions-cell">
+        <div class="table-action-buttons">
+        <button class="edit-btn" onclick="editProductGroup(${groupArg})" title="Sửa nhóm" aria-label="Sửa nhóm">
           <i class="fas fa-edit"></i>
         </button>
-        <button class="btn-danger" onclick="deleteProductGroup(${groupArg})">
+        <button class="delete-btn" onclick="deleteProductGroup(${groupArg})" title="Xóa nhóm" aria-label="Xóa nhóm">
           <i class="fas fa-trash"></i>
         </button>
+        </div>
       </td>
     `;
     tbody.appendChild(row);
