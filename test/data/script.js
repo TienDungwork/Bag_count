@@ -5,6 +5,8 @@ let currentBatchId = null;
 let currentOrderBatch = []; // Current batch being edited
 let hasAutoLoadedCurrentBatch = false; // Tránh phải click đổi qua lại mới hiện dữ liệu
 let currentProducts = [];
+let productGroups = [];
+let editingProductGroupName = null;
 let editingProductId = null;
 
 // Toggle log hiển thị trên console trình duyệt
@@ -133,6 +135,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   console.log('Updating UI components...');
   updateCurrentBatchSelect();
   updateBatchSelector();
+  updateProductGroupSelect();
+  updateProductGroupTable();
   updateProductTable();
   updateBatchDisplay();
   updateConveyorNameDisplay();
@@ -159,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   updateOverview();
   
   // Cập nhật tất cả dropdown sản phẩm sau khi load xong
+  updateProductGroupSelect();
   updateAllProductSelects();
   
   // Get device information on startup
@@ -306,7 +311,9 @@ async function loadProductsFromESP32() {
       const esp32Products = await response.json();
       if (esp32Products && esp32Products.length > 0) {
         currentProducts = esp32Products;
+        mergeProductGroupsFromProducts();
         localStorage.setItem('products', JSON.stringify(currentProducts));
+        saveProductGroups();
         console.log('Products loaded from ESP32:', esp32Products.length, 'products');
         console.log('DEBUG: Loaded products:', currentProducts);
         return true;
@@ -3483,6 +3490,231 @@ async function sendOrdersOneByOne(orders) {
   }
 }
 
+// Product Group Management
+function normalizeProductGroupName(name) {
+  return String(name || '').replace(/\s+/g, ' ').trim();
+}
+
+function getProductGroupName(group) {
+  return normalizeProductGroupName(typeof group === 'string' ? group : group?.name);
+}
+
+function getProductDisplayText(product) {
+  const codeName = product.code ? `${product.code} - ${product.name}` : product.name;
+  return product.group ? `${product.group} - ${codeName}` : codeName;
+}
+
+function ensureProductGroup(groupName) {
+  const normalizedName = normalizeProductGroupName(groupName);
+  if (!normalizedName) return false;
+
+  const exists = productGroups.some(group => getProductGroupName(group).toLowerCase() === normalizedName.toLowerCase());
+  if (!exists) {
+    productGroups.push(normalizedName);
+    saveProductGroups();
+  }
+  return true;
+}
+
+function mergeProductGroupsFromProducts() {
+  currentProducts.forEach(product => {
+    if (product.group) ensureProductGroup(product.group);
+  });
+}
+
+function loadProductGroups() {
+  try {
+    const saved = localStorage.getItem('productGroups');
+    productGroups = saved ? JSON.parse(saved).map(getProductGroupName).filter(Boolean) : [];
+  } catch (error) {
+    console.error('Error loading product groups:', error);
+    productGroups = [];
+  }
+
+  mergeProductGroupsFromProducts();
+  saveProductGroups();
+  updateProductGroupSelect();
+  updateProductGroupTable();
+}
+
+function saveProductGroups() {
+  const uniqueGroups = [];
+  productGroups.forEach(group => {
+    const groupName = getProductGroupName(group);
+    if (!groupName) return;
+    const exists = uniqueGroups.some(item => item.toLowerCase() === groupName.toLowerCase());
+    if (!exists) uniqueGroups.push(groupName);
+  });
+  productGroups = uniqueGroups;
+  localStorage.setItem('productGroups', JSON.stringify(productGroups));
+}
+
+function updateProductGroupSelect() {
+  const select = document.getElementById('productGroup');
+  if (!select) return;
+
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">Chọn nhóm sản phẩm</option>';
+
+  productGroups.forEach(group => {
+    const groupName = getProductGroupName(group);
+    if (!groupName) return;
+    const option = document.createElement('option');
+    option.value = groupName;
+    option.textContent = groupName;
+    select.appendChild(option);
+  });
+
+  if (currentValue && productGroups.some(group => getProductGroupName(group) === currentValue)) {
+    select.value = currentValue;
+  }
+}
+
+function countProductsInGroup(groupName) {
+  return currentProducts.filter(product => product.group === groupName).length;
+}
+
+function updateProductGroupTable() {
+  const tbody = document.getElementById('productGroupTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (productGroups.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có nhóm sản phẩm nào</td></tr>';
+    return;
+  }
+
+  productGroups.forEach((group, index) => {
+    const groupName = getProductGroupName(group);
+    const row = document.createElement('tr');
+    const groupArg = JSON.stringify(groupName);
+    row.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${groupName}</td>
+      <td>${countProductsInGroup(groupName)}</td>
+      <td>
+        <button class="edit-btn" onclick="editProductGroup(${groupArg})">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn-danger" onclick="deleteProductGroup(${groupArg})">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function saveProductGroupForm() {
+  const input = document.getElementById('productGroupName');
+  const groupName = normalizeProductGroupName(input?.value);
+  if (!groupName) {
+    alert('Vui lòng nhập tên nhóm sản phẩm');
+    return;
+  }
+
+  const duplicated = productGroups.some(group => {
+    const currentName = getProductGroupName(group);
+    return currentName.toLowerCase() === groupName.toLowerCase() && currentName !== editingProductGroupName;
+  });
+  if (duplicated) {
+    alert('Nhóm sản phẩm đã tồn tại');
+    return;
+  }
+
+  if (editingProductGroupName) {
+    productGroups = productGroups.map(group => getProductGroupName(group) === editingProductGroupName ? groupName : getProductGroupName(group));
+    currentProducts.forEach(product => {
+      if (product.group === editingProductGroupName) product.group = groupName;
+    });
+    updateOrderProductGroups(editingProductGroupName, groupName);
+    saveProducts();
+    saveOrderBatches();
+    sendOrderBatchesToESP32();
+    showNotification('Cập nhật nhóm sản phẩm thành công', 'success');
+  } else {
+    productGroups.push(groupName);
+    showNotification('Thêm nhóm sản phẩm thành công', 'success');
+  }
+
+  saveProductGroups();
+  cancelProductGroupEdit();
+  updateProductGroupSelect();
+  updateProductGroupTable();
+  updateProductTable();
+  updateAllProductSelects();
+}
+
+function editProductGroup(groupName) {
+  editingProductGroupName = groupName;
+  const input = document.getElementById('productGroupName');
+  if (input) input.value = groupName;
+
+  const submitBtn = document.getElementById('productGroupSubmitBtn');
+  if (submitBtn) {
+    submitBtn.innerHTML = '<i class="fas fa-save"></i> Lưu thay đổi';
+  }
+
+  const cancelBtn = document.getElementById('productGroupCancelEditBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = 'inline-flex';
+  }
+}
+
+function cancelProductGroupEdit() {
+  editingProductGroupName = null;
+  const form = document.getElementById('productGroupForm');
+  if (form) form.reset();
+
+  const submitBtn = document.getElementById('productGroupSubmitBtn');
+  if (submitBtn) {
+    submitBtn.innerHTML = '<i class="fas fa-plus"></i> Thêm nhóm';
+  }
+
+  const cancelBtn = document.getElementById('productGroupCancelEditBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = 'none';
+  }
+}
+
+function deleteProductGroup(groupName) {
+  const productCount = countProductsInGroup(groupName);
+  const message = productCount > 0
+    ? `Nhóm này đang có ${productCount} sản phẩm. Nếu xóa, các sản phẩm đó sẽ bỏ nhóm. Bạn có muốn tiếp tục?`
+    : 'Bạn có chắc chắn muốn xóa nhóm sản phẩm này?';
+
+  if (!confirm(message)) return;
+
+  productGroups = productGroups.filter(group => getProductGroupName(group) !== groupName);
+  currentProducts.forEach(product => {
+    if (product.group === groupName) product.group = '';
+  });
+  updateOrderProductGroups(groupName, '');
+  saveProductGroups();
+  saveProducts();
+  saveOrderBatches();
+  sendOrderBatchesToESP32();
+  cancelProductGroupEdit();
+  updateProductGroupSelect();
+  updateProductGroupTable();
+  updateProductTable();
+  updateAllProductSelects();
+  showNotification('Xóa nhóm sản phẩm thành công', 'success');
+}
+
+function updateOrderProductGroups(oldGroupName, newGroupName) {
+  const updateOrder = (order) => {
+    if (order?.product?.group === oldGroupName) {
+      order.product.group = newGroupName;
+    }
+  };
+
+  orderBatches.forEach(batch => {
+    (batch.orders || []).forEach(updateOrder);
+  });
+  currentOrderBatch.forEach(updateOrder);
+}
+
 // Product Management (Updated)
 function saveProductForm() {
   const productGroup = document.getElementById('productGroup').value.trim();
@@ -3494,6 +3726,7 @@ function saveProductForm() {
     alert('Vui lòng điền đầy đủ thông tin sản phẩm hợp lệ');
     return;
   }
+  ensureProductGroup(productGroup);
   
   // Check if product code already exists
   if (currentProducts.find(p => p.code === productCode && String(p.id) !== String(editingProductId))) {
@@ -3537,7 +3770,10 @@ function saveProductForm() {
   }
 
   saveProducts();
+  saveProductGroups();
   saveOrderBatches();
+  updateProductGroupSelect();
+  updateProductGroupTable();
   updateProductTable();
   updateAllProductSelects(); // Cập nhật tất cả dropdown
   updateBatchPreview();
@@ -3563,6 +3799,8 @@ function editProduct(productId) {
   }
 
   editingProductId = product.id;
+  ensureProductGroup(product.group || '');
+  updateProductGroupSelect();
   document.getElementById('productGroup').value = product.group || '';
   document.getElementById('productName').value = product.name;
   document.getElementById('productCode').value = product.code;
@@ -3681,11 +3919,7 @@ function updateProductSelect() {
   currentProducts.forEach(product => {
     const option = document.createElement('option');
     option.value = product.id;
-    // Hiển thị: Nhóm - Mã - Tên sản phẩm
-    const displayText = product.group ? 
-      `${product.group} - ${product.code} - ${product.name}` : 
-      `${product.code} - ${product.name}`;
-    option.textContent = displayText;
+    option.textContent = getProductDisplayText(product);
     select.appendChild(option);
     console.log('Added product to select:', option.value, option.textContent);
   });
@@ -3703,10 +3937,7 @@ function updateAllProductSelects() {
     currentProducts.forEach(product => {
       const option = document.createElement('option');
       option.value = product.id;
-      const displayText = product.group ? 
-        `${product.group} - ${product.code} - ${product.name}` : 
-        `${product.code} - ${product.name}`;
-      option.textContent = displayText;
+      option.textContent = getProductDisplayText(product);
       editProductSelect.appendChild(option);
     });
   }
@@ -3722,7 +3953,7 @@ function updateAllProductSelects() {
     currentProducts.forEach(product => {
       const option = document.createElement('option');
       option.value = product.id; // Sửa từ product.name thành product.id
-      option.textContent = product.code ? `${product.code} - ${product.name}` : product.name;
+      option.textContent = getProductDisplayText(product);
       select.appendChild(option);
     });
     
@@ -4302,6 +4533,7 @@ function loadProducts() {
     productIdCounter = maxProductId + 1;
     console.log('Updated productIdCounter:', productIdCounter);
   }
+  loadProductGroups();
   updateProductSelect();
 }
 
@@ -5573,6 +5805,7 @@ function deleteProduct(id) {
     // GỬI LỆNH XÓA ĐẾN ESP32
     deleteProductFromESP32(id);
     
+    updateProductGroupTable();
     updateProductTable();
     updateProductSelect();
     showNotification('Xóa sản phẩm thành công', 'success');
@@ -5588,7 +5821,7 @@ function updateProductSelect() {
   currentProducts.forEach(product => {
     const option = document.createElement('option');
     option.value = product.id;
-    option.textContent = `${product.code} - ${product.name}`;
+    option.textContent = getProductDisplayText(product);
     select.appendChild(option);
   });
 }
@@ -7265,9 +7498,18 @@ document.addEventListener('click', function(event) {
 
 function showTab(tabName) {
   // Check if tab requires authentication
-  const protectedTabs = ['product', 'wifi', 'settings'];
+  const productProtectedTabs = ['product', 'product-groups'];
+  const settingsProtectedTabs = ['wifi', 'settings'];
+  const isProductProtected = productProtectedTabs.includes(tabName);
+  const isSettingsProtected = settingsProtectedTabs.includes(tabName);
   
-  if (protectedTabs.includes(tabName) && !authenticatedTabs.has(tabName)) {
+  if (isProductProtected && !authenticatedTabs.has('product')) {
+    setMainMenuOpen(false);
+    showPasswordModal(tabName);
+    return;
+  }
+
+  if (isSettingsProtected && !authenticatedTabs.has(tabName)) {
     setMainMenuOpen(false);
     showPasswordModal(tabName);
     return;
@@ -7284,7 +7526,7 @@ function showPasswordModal(targetTab) {
   
   // Set appropriate placeholder based on target tab
   const passwordInput = document.getElementById('adminPassword');
-  if (targetTab === 'product') {
+  if (targetTab === 'product' || targetTab === 'product-groups') {
     passwordInput.placeholder = 'Nhập mật khẩu ...';
   } else if (targetTab === 'wifi' || targetTab === 'settings') {
     passwordInput.placeholder = 'Nhập mật khẩu ...';
@@ -7310,14 +7552,19 @@ function verifyPassword() {
   let isValidPassword = false;
   
   // Check password based on target tab
-  if (targetTab === 'product') {
+  if (targetTab === 'product' || targetTab === 'product-groups') {
     isValidPassword = (password === ADMIN_PASSWORD);
   } else if (targetTab === 'wifi' || targetTab === 'settings') {
     isValidPassword = (password === SETTINGS_PASSWORD);
   }
   
   if (isValidPassword) {
-    authenticatedTabs.add(targetTab);
+    if (targetTab === 'product' || targetTab === 'product-groups') {
+      authenticatedTabs.add('product');
+      authenticatedTabs.add('product-groups');
+    } else {
+      authenticatedTabs.add(targetTab);
+    }
     closePasswordModal();
     showTabInternal(targetTab);
     showNotification('Xác thực thành công!', 'success');
@@ -7363,7 +7610,11 @@ function showTabInternal(tabName) {
       updateHistoryTable();
       break;
     case 'product':
+      updateProductGroupSelect();
       updateProductTable();
+      break;
+    case 'product-groups':
+      updateProductGroupTable();
       break;
     case 'order':
       updateCurrentBatchSelect();
@@ -7422,7 +7673,7 @@ function addProductItem() {
     currentProducts.forEach(product => {
       const option = document.createElement('option');
       option.value = product.id;
-      option.textContent = product.code ? `${product.code} - ${product.name}` : product.name;
+      option.textContent = getProductDisplayText(product);
       select.appendChild(option);
     });
     console.log('✅ DEBUG: Populated select with', currentProducts.length, 'products');
@@ -7477,7 +7728,7 @@ function addInitialProductItem() {
     currentProducts.forEach(product => {
       const option = document.createElement('option');
       option.value = product.id;
-      option.textContent = product.code ? `${product.code} - ${product.name}` : product.name;
+      option.textContent = getProductDisplayText(product);
       select.appendChild(option);
     });
     console.log('✅ DEBUG: Populated initial select with', currentProducts.length, 'products');
