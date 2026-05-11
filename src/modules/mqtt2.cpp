@@ -64,6 +64,106 @@ void onMqttMessage2(char* topic, byte* payload, unsigned int length) {
   Serial.println("  Message: " + message);
 }
 
+static String mqtt2JsonString(JsonObject obj, const char* key) {
+  if (obj.isNull() || !obj.containsKey(key)) {
+    return "";
+  }
+  return obj[key].as<String>();
+}
+
+static String mqtt2OrderProductGroup(JsonObject order) {
+  String group = mqtt2JsonString(order, "productGroup");
+  if (group.length() > 0) {
+    return group;
+  }
+
+  if (order.containsKey("product") && order["product"].is<JsonObject>()) {
+    JsonObject product = order["product"];
+    group = mqtt2JsonString(product, "group");
+    if (group.length() > 0) {
+      return group;
+    }
+  }
+
+  return "";
+}
+
+static void mqtt2ApplyOrderProduct(JsonObject order, String& resolvedProductName,
+                                   String& resolvedProductCode, String& resolvedProductGroup) {
+  String orderProductName = mqtt2JsonString(order, "productName");
+  String orderProductCode = orderProductCodeFromJson(order);
+  String orderProductGroup = mqtt2OrderProductGroup(order);
+
+  if (resolvedProductName.length() == 0 && orderProductName.length() > 0) {
+    resolvedProductName = orderProductName;
+  }
+  if (resolvedProductCode.length() == 0 && orderProductCode.length() > 0) {
+    resolvedProductCode = orderProductCode;
+  }
+  if (resolvedProductGroup.length() == 0 && orderProductGroup.length() > 0) {
+    resolvedProductGroup = orderProductGroup;
+  }
+}
+
+static void mqtt2ResolveProductInfo(String& resolvedProductName, String& resolvedProductCode,
+                                    String& resolvedProductGroup) {
+  resolvedProductName = bagType;
+  resolvedProductCode = productCode;
+  resolvedProductGroup = "";
+
+  int bestScore = 0;
+  JsonObject bestOrder;
+
+  for (size_t i = 0; i < ordersData.size(); i++) {
+    JsonArray orders = ordersData[i]["orders"];
+    for (JsonObject order : orders) {
+      String orderProductName = mqtt2JsonString(order, "productName");
+      String orderProductCode = orderProductCodeFromJson(order);
+      String orderOrderCode = mqtt2JsonString(order, "orderCode");
+      String status = mqtt2JsonString(order, "status");
+      bool selected = order["selected"] | false;
+
+      int score = 0;
+      if (orderCode.length() > 0 && orderOrderCode == orderCode) score += 8;
+      if (resolvedProductCode.length() > 0 && orderProductCode == resolvedProductCode) score += 4;
+      if (resolvedProductName.length() > 0 && orderProductName == resolvedProductName) score += 2;
+      if (selected) score += 1;
+      if (status == "counting") score += 2;
+      if (status == "waiting" || status == "paused") score += 1;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestOrder = order;
+      }
+    }
+  }
+
+  if (!bestOrder.isNull()) {
+    mqtt2ApplyOrderProduct(bestOrder, resolvedProductName, resolvedProductCode, resolvedProductGroup);
+  }
+
+  for (size_t i = 0; i < productsData.size(); i++) {
+    JsonObject product = productsData[i];
+    String catalogProductName = mqtt2JsonString(product, "name");
+    String catalogProductCode = mqtt2JsonString(product, "code");
+    bool codeMatch = resolvedProductCode.length() > 0 && catalogProductCode == resolvedProductCode;
+    bool nameMatch = resolvedProductName.length() > 0 && catalogProductName == resolvedProductName;
+
+    if (codeMatch || nameMatch) {
+      if (resolvedProductName.length() == 0) {
+        resolvedProductName = catalogProductName;
+      }
+      if (resolvedProductCode.length() == 0) {
+        resolvedProductCode = catalogProductCode;
+      }
+      if (resolvedProductGroup.length() == 0) {
+        resolvedProductGroup = mqtt2JsonString(product, "group");
+      }
+      break;
+    }
+  }
+}
+
 // PAYLOAD gửi lên MQTT2
 void publishMQTT2OrderComplete() {
   // Kiểm tra điều kiện kết nối
@@ -90,19 +190,13 @@ void publishMQTT2OrderComplete() {
   // Tạo topic theo format: devices/{KeyLogin}/Transaction
   String mqtt2_topic_transaction = "devices/" + mqtt2_password + "/Transaction";
   
-  DynamicJsonDocument doc(768);
+  DynamicJsonDocument doc(1024);
   
   // Payload theo sample/doc.md: devices/{KeyLogin}/Transaction
-  String currentProductGroup = "";
-  if (productCode.length() > 0) {
-    JsonArray products = productsData.as<JsonArray>();
-    for (JsonObject product : products) {
-      if (product["code"] == productCode) {
-        currentProductGroup = product["group"] | "";
-        break;
-      }
-    }
-  }
+  String resolvedProductName;
+  String resolvedProductCode;
+  String resolvedProductGroup;
+  mqtt2ResolveProductInfo(resolvedProductName, resolvedProductCode, resolvedProductGroup);
 
   String customerDisplayName = currentBatchName;
   if (customerDisplayName.length() == 0) {
@@ -111,9 +205,9 @@ void publishMQTT2OrderComplete() {
 
   doc["Name"] = customerDisplayName;
   doc["OrderCode"] = orderCode;
-  doc["ProductName"] = bagType;
-  doc["ProductGroup"] = currentProductGroup;
-  doc["ProductCode"] = productCode;
+  doc["ProductName"] = resolvedProductName;
+  doc["ProductGroup"] = resolvedProductGroup;
+  doc["ProductCode"] = resolvedProductCode;
   doc["CustomerName"] = customerDisplayName;
   doc["CustomerPhone"] = customerName;
   doc["StartTime"] = startTimeStr;
@@ -121,6 +215,11 @@ void publishMQTT2OrderComplete() {
   doc["Location"] = location;
   doc["PlannedCount"] = (int)targetCount;
   doc["ActualCount"] = (long)totalCount;
+
+  Serial.println("MQTT2 resolved product:");
+  Serial.println("  ProductName: " + resolvedProductName);
+  Serial.println("  ProductGroup: " + resolvedProductGroup);
+  Serial.println("  ProductCode: " + resolvedProductCode);
   
   // Serialize JSON
   String message;
@@ -135,6 +234,8 @@ void publishMQTT2OrderComplete() {
     Serial.println("Data: " + message);
   } else {
     Serial.println("MQTT2 Order Complete publish failed!");
+    Serial.println("Topic: " + mqtt2_topic_transaction);
+    Serial.println("Data: " + message);
   }
 }
 

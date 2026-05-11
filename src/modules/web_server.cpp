@@ -1642,6 +1642,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
   // API cài đặt chung - Trả về giá trị hiện tại (từ biến global)
   server.on("/api/settings", HTTP_GET, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     
     DynamicJsonDocument doc(2048);
     
@@ -1674,6 +1675,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     doc["mqtt2Username"] = mqtt2_username;
     doc["mqtt2Password"] = mqtt2_password;
     doc["_mqtt2Connected"] = mqtt2.connected();
+    doc["_mqtt2State"] = mqtt2.state();
     
     // Weight-based Detection Delay settings
     doc["enableWeightBasedDelay"] = enableWeightBasedDelay;

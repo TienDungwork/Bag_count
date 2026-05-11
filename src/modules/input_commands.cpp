@@ -162,6 +162,9 @@ void loadCurrentOrderForDisplay() {
         if (order.containsKey("product") && order["product"].containsKey("code")) {
           productCodeFromOrder = order["product"]["code"].as<String>();
         }
+        if (productCodeFromOrder.length() == 0 && order.containsKey("productCode")) {
+          productCodeFromOrder = order["productCode"].as<String>();
+        }
         
         int quantity = order["quantity"] | 20;
         int warningQuantity = order["warningQuantity"].as<int>() | 5; // Mặc định 5 nếu không có

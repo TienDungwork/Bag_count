@@ -4614,6 +4614,8 @@ async function loadSettingsFromESP32() {
       if (esp32Settings.mqtt2Port !== undefined) settings.mqtt2Port = esp32Settings.mqtt2Port;
       if (esp32Settings.mqtt2Username !== undefined) settings.mqtt2Username = esp32Settings.mqtt2Username;
       if (esp32Settings.mqtt2Password !== undefined) settings.mqtt2Password = esp32Settings.mqtt2Password;
+      if (esp32Settings._mqtt2Connected !== undefined) settings._mqtt2Connected = Boolean(esp32Settings._mqtt2Connected);
+      if (esp32Settings._mqtt2State !== undefined) settings._mqtt2State = esp32Settings._mqtt2State;
       
       // Weight-based delay settings - LUÔN BẬT
       if (esp32Settings.weightDelayRules !== undefined && Array.isArray(esp32Settings.weightDelayRules)) {
@@ -6114,8 +6116,11 @@ function saveSettings() {
 // MQTT2 Functions
 function updateMQTT2Status(connected) {
   const statusElement = document.getElementById('mqtt2Status');
+  const isConnected = Boolean(connected);
+  settings._mqtt2Connected = isConnected;
+
   if (statusElement) {
-    if (connected) {
+    if (isConnected) {
       statusElement.className = 'status-indicator online';
       statusElement.textContent = 'Đã kết nối';
     } else {
@@ -6123,6 +6128,20 @@ function updateMQTT2Status(connected) {
       statusElement.textContent = 'Chưa kết nối';
     }
   }
+}
+
+async function refreshMQTT2StatusFromESP32() {
+  const settingsResponse = await fetch('/api/settings', { cache: 'no-store' });
+  if (!settingsResponse.ok) {
+    throw new Error(`HTTP error! status: ${settingsResponse.status}`);
+  }
+
+  const newSettings = await settingsResponse.json();
+  const connected = Boolean(newSettings._mqtt2Connected);
+  settings._mqtt2Connected = connected;
+  if (newSettings._mqtt2State !== undefined) settings._mqtt2State = newSettings._mqtt2State;
+  updateMQTT2Status(connected);
+  return { connected, state: newSettings._mqtt2State };
 }
 
 async function testMQTT2Connection() {
@@ -6154,19 +6173,19 @@ async function testMQTT2Connection() {
     });
     
     if (response.ok) {
-      const result = await response.json();
-      showNotification('Test kết nối MQTT2 thành công!', 'success');
-      
-      // Reload settings to get connection status
+      await response.json();
+
       setTimeout(async () => {
         try {
-          const settingsResponse = await fetch('/api/settings');
-          if (settingsResponse.ok) {
-            const newSettings = await settingsResponse.json();
-            updateMQTT2Status(newSettings._mqtt2Connected || false);
+          const mqtt2Status = await refreshMQTT2StatusFromESP32();
+          if (mqtt2Status.connected) {
+            showNotification('Test kết nối MQTT2 thành công!', 'success');
+          } else {
+            showNotification(`Đã lưu cấu hình, nhưng MQTT2 chưa kết nối (state=${mqtt2Status.state})`, 'error');
           }
         } catch (error) {
-          console.error('Error reloading settings:', error);
+          console.error('Error reloading MQTT2 status:', error);
+          showNotification('Không đọc được trạng thái MQTT2: ' + error.message, 'error');
         }
       }, 2000);
     } else {
