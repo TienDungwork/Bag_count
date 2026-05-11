@@ -363,7 +363,8 @@ void updateCount(int bagCount) {
         // Append new entry with fields the web expects
         JsonObject newEntry = histArr.createNestedObject();
         newEntry["timestamp"] = currentTime;
-        newEntry["startTime"] = startTimeStr;
+        newEntry["startTime"] = startTimeIsoStr;
+        newEntry["displayStartTime"] = startTimeStr;
         newEntry["customerName"] = historyCustomerName;
         newEntry["productName"] = historyProductName;
         newEntry["productCode"] = completedProductCode;

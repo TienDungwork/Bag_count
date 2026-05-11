@@ -526,7 +526,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         bool isSyncServer = v["IsSyncServer"] | false;
 
         obj["timestamp"] = timestamp;
-        obj["startTime"] = v["startTime"] | timestamp;
+        obj["startTime"] = v["startTime"] | "";
+        obj["displayStartTime"] = v["displayStartTime"] | timestamp;
         obj["customerName"] = customer;
         obj["productName"] = product;
         obj["productCode"] = productCode;
@@ -560,7 +561,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       bool isSyncServer = v["IsSyncServer"] | false;
 
       obj["timestamp"] = timestamp;
-      obj["startTime"] = v["startTime"] | timestamp;
+      obj["startTime"] = v["startTime"] | "";
+      obj["displayStartTime"] = v["displayStartTime"] | timestamp;
       obj["customerName"] = customer;
       obj["productName"] = product;
       obj["productCode"] = productCode;
@@ -915,6 +917,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             blinkCount = 0;
             isBlinking = false;
             startTimeStr = "";
+            startTimeIsoStr = "";
             timeWaitingForSync = false;
             updateStartLED();
             updateDoneLED();
@@ -947,6 +950,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           blinkCount = 0;
           isBlinking = false;
           startTimeStr = "";
+          startTimeIsoStr = "";
           timeWaitingForSync = false;
           updateStartLED();
           updateDoneLED();

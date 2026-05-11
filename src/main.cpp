@@ -589,6 +589,7 @@ void loop() {
   // Kiểm tra và cập nhật thời gian bắt đầu nếu đang chờ đồng bộ
   if (timeWaitingForSync && time(nullptr) > 24 * 3600) {
     startTimeStr = getTimeStr();
+    startTimeIsoStr = getIsoTimeStr();
     timeWaitingForSync = false;
     Serial.print("Time sync completed - Start time updated to: ");
     Serial.println(startTimeStr);

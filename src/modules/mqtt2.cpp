@@ -96,11 +96,6 @@ static bool publishMQTT2HistoryEntry(JsonObject entry) {
     payloadName = mqtt2JsonString(entry, "productName");
   }
 
-  String startTime = mqtt2JsonString(entry, "startTime");
-  if (startTime.length() == 0) {
-    startTime = mqtt2JsonString(entry, "timestamp");
-  }
-
   String entryLocation = mqtt2JsonString(entry, "location");
   if (entryLocation.length() == 0) {
     entryLocation = location;
@@ -114,7 +109,7 @@ static bool publishMQTT2HistoryEntry(JsonObject entry) {
   doc["ProductCode"] = mqtt2JsonString(entry, "productCode");
   doc["CustomerName"] = mqtt2JsonString(entry, "customerName");
   doc["CustomerPhone"] = mqtt2JsonString(entry, "customerPhone");
-  doc["StartTime"] = startTime;
+  doc["StartTime"] = mqtt2JsonString(entry, "startTime");
   doc["SetMode"] = mqtt2SetModeForHistory(entry);
   doc["Location"] = entryLocation;
   doc["PlannedCount"] = entry["plannedQuantity"] | entry["planned"] | entry["target"] | 0;
@@ -422,7 +417,7 @@ void publishMQTT2OrderComplete() {
   doc["ProductCode"] = resolvedProductCode;
   doc["CustomerName"] = customerDisplayName;
   doc["CustomerPhone"] = customerName;
-  doc["StartTime"] = startTimeStr;
+  doc["StartTime"] = startTimeIsoStr;
   doc["SetMode"] = currentMode == "input" ? 1 : 2;
   doc["Location"] = location;
   doc["PlannedCount"] = (int)targetCount;
@@ -489,6 +484,18 @@ String getTimeStr() {
   struct tm* t = localtime(&now);
   char buf[32];
   strftime(buf, sizeof(buf), "%H:%M - %d/%m/%Y", t);
+  return String(buf);
+}
+
+String getIsoTimeStr() {
+  time_t now = time(nullptr);
+  if (now < 24 * 3600) {
+    return "";
+  }
+
+  struct tm* t = gmtime(&now);
+  char buf[32];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", t);
   return String(buf);
 }
 

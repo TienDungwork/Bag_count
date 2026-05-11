@@ -40,9 +40,11 @@ void handleIRCommand(int button) {
       
       if (time(nullptr) > 24 * 3600) {
         startTimeStr = getTimeStr();
+        startTimeIsoStr = getIsoTimeStr();
         timeWaitingForSync = false;
       } else {
         startTimeStr = "Waiting for time sync...";
+        startTimeIsoStr = "";
         timeWaitingForSync = true;
       }
       
@@ -87,6 +89,7 @@ void handleIRCommand(int button) {
       isStartAuthorized = false;
       history.clear();
       startTimeStr = "";
+      startTimeIsoStr = "";
       timeWaitingForSync = false;
       currentSystemStatus = "RESET";
       action = "RESET";
@@ -233,9 +236,11 @@ void handleWebCommand(int button) {
       
       if (time(nullptr) > 24 * 3600) {
         startTimeStr = getTimeStr();
+        startTimeIsoStr = getIsoTimeStr();
         timeWaitingForSync = false;
       } else {
         startTimeStr = "Waiting for time sync...";
+        startTimeIsoStr = "";
         timeWaitingForSync = true;
       }
       
@@ -278,6 +283,7 @@ void handleWebCommand(int button) {
       waitForSensorClearOnStart = false;
       history.clear();
       startTimeStr = "";
+      startTimeIsoStr = "";
       timeWaitingForSync = false;
       currentSystemStatus = "RESET";
       action = "RESET";
