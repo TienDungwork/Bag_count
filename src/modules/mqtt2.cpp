@@ -21,13 +21,11 @@ static String mqtt2SanitizedKeyLoginClientId() {
   return clientId;
 }
 
-static bool connectMQTT2WithClientId(const String& clientId, const String& statusTopic,
-                                     const char* offlinePayload) {
+static bool connectMQTT2WithClientId(const String& clientId) {
   String displayClientId = clientId.length() > 0 ? clientId : "(empty - broker assigned)";
   Serial.println("Trying MQTT2 ClientId: " + displayClientId);
 
-  bool connected = mqtt2.connect(clientId.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str(),
-                                 statusTopic.c_str(), 0, true, offlinePayload);
+  bool connected = mqtt2.connect(clientId.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str());
   if (!connected) {
     Serial.println("MQTT2 connect failed with ClientId '" + displayClientId + "', rc=" + String(mqtt2.state()));
     mqtt2.disconnect();
@@ -268,21 +266,18 @@ void setupMQTT2() {
   Serial.println("Username: " + mqtt2_username);
   Serial.println("KeyLogin: " + mqtt2_password);
   
-  String statusTopic = mqtt2Topic("status");
-  const char* offlinePayload = "{\"status\":\"offline\"}";
-
-  bool connected = connectMQTT2WithClientId(sanitizedKeyLoginClientId, statusTopic, offlinePayload);
+  bool connected = connectMQTT2WithClientId(sanitizedKeyLoginClientId);
 
   if (!connected && mqtt2.state() == 2 && keyLoginClientId != sanitizedKeyLoginClientId) {
-    connected = connectMQTT2WithClientId(keyLoginClientId, statusTopic, offlinePayload);
+    connected = connectMQTT2WithClientId(keyLoginClientId);
   }
 
   if (!connected && mqtt2.state() == 2 && chipClientId != sanitizedKeyLoginClientId && chipClientId != keyLoginClientId) {
-    connected = connectMQTT2WithClientId(chipClientId, statusTopic, offlinePayload);
+    connected = connectMQTT2WithClientId(chipClientId);
   }
 
   if (!connected && mqtt2.state() == 2) {
-    connected = connectMQTT2WithClientId("", statusTopic, offlinePayload);
+    connected = connectMQTT2WithClientId("");
   }
 
   if (connected) {
