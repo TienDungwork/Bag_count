@@ -4140,7 +4140,7 @@ function updateHistoryTable() {
   
   if (countingHistory.length === 0) {
     console.log('No history data, showing empty message');
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có lịch sử đếm</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center">Chưa có lịch sử đếm</td></tr>';
     return;
   }
   
@@ -4193,6 +4193,12 @@ function updateHistoryTable() {
       </td>
       <td style="text-align: center;">${entry.vehicleNumber || 'N/A'}</td>
       <td style="font-weight: 500;">${entry.productName}</td>
+      <td style="text-align: center;">
+        <span class="status-indicator ${entry.IsSyncServer ? 'status-completed' : 'status-warning'}">
+          <i class="fas fa-${entry.IsSyncServer ? 'check-circle' : 'clock'}"></i>
+          ${entry.IsSyncServer ? 'Đã đẩy' : 'Chưa đẩy'}
+        </span>
+      </td>
       <td class="number-cell" style="color: #333;">${entry.plannedQuantity}</td>
       <td class="number-cell">
         <span style="color: ${isAccurate ? '#4CAF50' : '#f44336'}; font-weight: bold;">
@@ -5927,7 +5933,7 @@ function updateHistoryTableWithData(historyData) {
   tbody.innerHTML = '';
   
   if (historyData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Không tìm thấy dữ liệu trong khoảng thời gian này</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center">Không tìm thấy dữ liệu trong khoảng thời gian này</td></tr>';
     return;
   }
   
@@ -5957,6 +5963,12 @@ function updateHistoryTableWithData(historyData) {
       </td>
       <td>${entry.vehicleNumber || 'N/A'}</td>
       <td>${productDisplay}</td>
+      <td style="text-align: center;">
+        <span class="status-indicator ${entry.IsSyncServer ? 'status-completed' : 'status-warning'}">
+          <i class="fas fa-${entry.IsSyncServer ? 'check-circle' : 'clock'}"></i>
+          ${entry.IsSyncServer ? 'Đã đẩy' : 'Chưa đẩy'}
+        </span>
+      </td>
       <td><strong>${entry.plannedQuantity}</strong></td>
       <td>
         <span style="color: ${isAccurate ? 'green' : 'red'}; font-weight: bold;">
