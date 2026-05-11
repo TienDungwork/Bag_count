@@ -14,6 +14,23 @@ static String mqtt2ClientId() {
   return String(id);
 }
 
+static bool connectMQTT2WithClientId(const String& clientId, const String& statusTopic,
+                                     const char* offlinePayload) {
+  String displayClientId = clientId.length() > 0 ? clientId : "(empty - broker assigned)";
+  Serial.println("Trying MQTT2 ClientId: " + displayClientId);
+
+  bool connected = mqtt2.connect(clientId.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str(),
+                                 statusTopic.c_str(), 0, true, offlinePayload);
+  if (!connected) {
+    Serial.println("MQTT2 connect failed with ClientId '" + displayClientId + "', rc=" + String(mqtt2.state()));
+    mqtt2.disconnect();
+    ethClient2.stop();
+    delay(100);
+  }
+
+  return connected;
+}
+
 static bool publishMQTT2ConnectionStatus(bool online) {
   if (mqtt2_password.length() == 0 || !mqtt2.connected()) {
     return false;
@@ -216,6 +233,10 @@ void setupMQTT2() {
     Serial.println("MQTT2: Cannot setup in AP mode");
     return;
   }
+
+  mqtt_server2.trim();
+  mqtt2_username.trim();
+  mqtt2_password.trim();
   
   // Kiểm tra KeyLogin có được cấu hình chưa
   if (mqtt2_password.length() == 0) {
@@ -230,20 +251,29 @@ void setupMQTT2() {
   mqtt2.setBufferSize(2048);
   mqtt2.setKeepAlive(60);
   
-  String clientId2 = mqtt2ClientId();
+  String keyLoginClientId = mqtt2_password;
+  keyLoginClientId.trim();
+  String chipClientId = mqtt2ClientId();
   
   Serial.print("Connecting to MQTT broker 2: ");
   Serial.println(mqtt_server2 + ":" + String(mqtt_port2));
-  Serial.println("ClientId: " + clientId2);
   Serial.println("Username: " + mqtt2_username);
   Serial.println("KeyLogin: " + mqtt2_password);
   
   String statusTopic = mqtt2Topic("status");
   const char* offlinePayload = "{\"status\":\"offline\"}";
 
-  // Kết nối với username/password và LWT để broker tự báo offline nếu thiết bị mất kết nối.
-  if (mqtt2.connect(clientId2.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str(),
-                    statusTopic.c_str(), 0, true, offlinePayload)) {
+  bool connected = connectMQTT2WithClientId(keyLoginClientId, statusTopic, offlinePayload);
+
+  if (!connected && mqtt2.state() == 2 && chipClientId != keyLoginClientId) {
+    connected = connectMQTT2WithClientId(chipClientId, statusTopic, offlinePayload);
+  }
+
+  if (!connected && mqtt2.state() == 2) {
+    connected = connectMQTT2WithClientId("", statusTopic, offlinePayload);
+  }
+
+  if (connected) {
     Serial.println("MQTT Client 2 connected successfully!");
     Serial.println("Kết nối broker " + mqtt_server2 + ":" + String(mqtt_port2) + " thành công!");
 
