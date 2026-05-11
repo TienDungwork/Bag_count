@@ -160,6 +160,17 @@ static bool publishMQTT2HistoryEntry(JsonObject entry) {
     payloadName = mqtt2JsonString(entry, "productName");
   }
 
+  String customerDisplayName = mqtt2JsonString(entry, "customerDisplayName");
+  if (customerDisplayName.length() == 0) {
+    customerDisplayName = payloadName;
+  }
+
+  String customerPhone = mqtt2JsonString(entry, "customerPhone");
+  if (customerPhone.length() == 0) {
+    // The web UI currently stores the phone input in customerName.
+    customerPhone = mqtt2JsonString(entry, "customerName");
+  }
+
   String entryLocation = mqtt2JsonString(entry, "location");
   if (entryLocation.length() == 0) {
     entryLocation = location;
@@ -171,8 +182,8 @@ static bool publishMQTT2HistoryEntry(JsonObject entry) {
   doc["ProductName"] = mqtt2JsonString(entry, "productName");
   doc["ProductGroup"] = mqtt2ProductGroupForHistory(entry);
   doc["ProductCode"] = mqtt2JsonString(entry, "productCode");
-  doc["CustomerName"] = mqtt2JsonString(entry, "customerName");
-  doc["CustomerPhone"] = mqtt2JsonString(entry, "customerPhone");
+  doc["CustomerName"] = customerDisplayName;
+  doc["CustomerPhone"] = customerPhone;
   doc["StartTime"] = mqtt2JsonString(entry, "startTime");
   doc["SetMode"] = mqtt2SetModeForHistory(entry);
   doc["Location"] = entryLocation;

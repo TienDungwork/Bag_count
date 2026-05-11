@@ -516,6 +516,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         // Normalize fields with fallbacks for old schema
         const char* timestamp = v["timestamp"] | v["time"] | "";
         const char* customer = v["customerName"] | v["customer"] | "";
+        const char* customerDisplayName = v["customerDisplayName"] | v["batchName"] | "";
+        const char* customerPhone = v["customerPhone"] | "";
         const char* product = v["productName"] | v["product"] | v["batchType"] | "";
         const char* productCode = v["productCode"] | "";
         const char* productGroup = v["productGroup"] | "";
@@ -529,6 +531,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         obj["startTime"] = v["startTime"] | "";
         obj["displayStartTime"] = v["displayStartTime"] | timestamp;
         obj["customerName"] = customer;
+        obj["customerDisplayName"] = customerDisplayName;
+        obj["customerPhone"] = customerPhone;
         obj["productName"] = product;
         obj["productCode"] = productCode;
         obj["productGroup"] = productGroup;
@@ -552,6 +556,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
 
       const char* timestamp = v["timestamp"] | v["time"] | "";
       const char* customer = v["customerName"] | v["customer"] | "";
+      const char* customerDisplayName = v["customerDisplayName"] | v["batchName"] | "";
+      const char* customerPhone = v["customerPhone"] | "";
       const char* product = v["productName"] | v["product"] | v["batchType"] | "";
       const char* productCode = v["productCode"] | "";
       const char* productGroup = v["productGroup"] | "";
@@ -565,6 +571,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       obj["startTime"] = v["startTime"] | "";
       obj["displayStartTime"] = v["displayStartTime"] | timestamp;
       obj["customerName"] = customer;
+      obj["customerDisplayName"] = customerDisplayName;
+      obj["customerPhone"] = customerPhone;
       obj["productName"] = product;
       obj["productCode"] = productCode;
       obj["productGroup"] = productGroup;
@@ -3045,6 +3053,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           bool existingSyncFlag = false;
           String existingSyncServerAt = "";
           String existingProductGroup = "";
+          String existingCustomerDisplayName = "";
+          String existingCustomerPhone = "";
           String incomingTimestamp = incomingEntry["timestamp"] | "";
           String incomingOrderCode = incomingEntry["orderCode"] | "";
           String incomingProductName = incomingEntry["productName"] | "";
@@ -3064,6 +3074,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                 }
                 existingSyncServerAt = existingEntry["syncServerAt"] | "";
                 existingProductGroup = existingEntry["productGroup"] | "";
+                existingCustomerDisplayName = existingEntry["customerDisplayName"] | "";
+                existingCustomerPhone = existingEntry["customerPhone"] | "";
                 break;
               }
             }
@@ -3077,6 +3089,16 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                String((const char*)(incomingEntry["productGroup"] | "")).length() == 0) &&
               existingProductGroup.length() > 0) {
             incomingEntry["productGroup"] = existingProductGroup;
+          }
+          if ((!incomingEntry.containsKey("customerDisplayName") ||
+               String((const char*)(incomingEntry["customerDisplayName"] | "")).length() == 0) &&
+              existingCustomerDisplayName.length() > 0) {
+            incomingEntry["customerDisplayName"] = existingCustomerDisplayName;
+          }
+          if ((!incomingEntry.containsKey("customerPhone") ||
+               String((const char*)(incomingEntry["customerPhone"] | "")).length() == 0) &&
+              existingCustomerPhone.length() > 0) {
+            incomingEntry["customerPhone"] = existingCustomerPhone;
           }
         }
 

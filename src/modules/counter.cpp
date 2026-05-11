@@ -440,6 +440,8 @@ void updateCount(int bagCount) {
         newEntry["startTime"] = startTimeIsoStr;
         newEntry["displayStartTime"] = startTimeStr;
         newEntry["customerName"] = historyCustomerName;
+        newEntry["customerDisplayName"] = currentBatchName;
+        newEntry["customerPhone"] = historyCustomerName;
         newEntry["productName"] = historyProductName;
         newEntry["productCode"] = completedProductCode;
         newEntry["productGroup"] = historyProductGroup;
