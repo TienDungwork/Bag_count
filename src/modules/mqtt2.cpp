@@ -7,6 +7,13 @@ static String mqtt2Topic(const char* action) {
   return "devices/" + mqtt2_password + "/" + String(action);
 }
 
+static String mqtt2ClientId() {
+  uint64_t chipId = ESP.getEfuseMac();
+  char id[24];
+  snprintf(id, sizeof(id), "ESP32%012llX", (unsigned long long)chipId);
+  return String(id);
+}
+
 static bool publishMQTT2ConnectionStatus(bool online) {
   if (mqtt2_password.length() == 0 || !mqtt2.connected()) {
     return false;
@@ -223,11 +230,11 @@ void setupMQTT2() {
   mqtt2.setBufferSize(2048);
   mqtt2.setKeepAlive(60);
   
-  // Tạo client ID random như khuyến nghị
-  String clientId2 = "ESP32Device_" + String(random(100000, 999999));
+  String clientId2 = mqtt2ClientId();
   
   Serial.print("Connecting to MQTT broker 2: ");
   Serial.println(mqtt_server2 + ":" + String(mqtt_port2));
+  Serial.println("ClientId: " + clientId2);
   Serial.println("Username: " + mqtt2_username);
   Serial.println("KeyLogin: " + mqtt2_password);
   
