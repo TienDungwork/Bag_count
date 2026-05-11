@@ -1,5 +1,78 @@
 #include "counter.h"
 
+static String historyJsonString(JsonObject obj, const char* key) {
+  if (!obj.containsKey(key) || obj[key].isNull()) {
+    return "";
+  }
+  return obj[key].as<String>();
+}
+
+static String productGroupFromOrder(JsonObject order) {
+  String group = historyJsonString(order, "productGroup");
+  if (group.length() > 0) {
+    return group;
+  }
+
+  if (order.containsKey("product") && order["product"].is<JsonObject>()) {
+    JsonObject product = order["product"];
+    group = historyJsonString(product, "group");
+    if (group.length() > 0) {
+      return group;
+    }
+  }
+
+  return "";
+}
+
+static String resolveHistoryProductGroup(const String& completedOrderCode,
+                                         const String& completedProductCode,
+                                         const String& completedProductName) {
+  int bestScore = 0;
+  String bestGroup = "";
+
+  for (size_t i = 0; i < ordersData.size(); i++) {
+    JsonArray orders = ordersData[i]["orders"];
+    for (JsonObject order : orders) {
+      String group = productGroupFromOrder(order);
+      if (group.length() == 0) {
+        continue;
+      }
+
+      String orderCodeValue = historyJsonString(order, "orderCode");
+      String orderProductName = historyJsonString(order, "productName");
+      String orderProductCode = orderProductCodeFromJson(order);
+
+      int score = 0;
+      if (completedOrderCode.length() > 0 && orderCodeValue == completedOrderCode) score += 8;
+      if (completedProductCode.length() > 0 && orderProductCode == completedProductCode) score += 4;
+      if (completedProductName.length() > 0 && orderProductName == completedProductName) score += 2;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = group;
+      }
+    }
+  }
+
+  if (bestGroup.length() > 0) {
+    return bestGroup;
+  }
+
+  for (size_t i = 0; i < productsData.size(); i++) {
+    JsonObject product = productsData[i];
+    String catalogProductCode = historyJsonString(product, "code");
+    String catalogProductName = historyJsonString(product, "name");
+    bool codeMatch = completedProductCode.length() > 0 && catalogProductCode == completedProductCode;
+    bool nameMatch = completedProductName.length() > 0 && catalogProductName == completedProductName;
+
+    if (codeMatch || nameMatch) {
+      return historyJsonString(product, "group");
+    }
+  }
+
+  return "";
+}
+
 unsigned long bagGroupGapToleranceMs() {
   const unsigned long minimumGapMs = 500;
   unsigned long debounceGapMs = (unsigned long)sensorDelayMs * 2;
@@ -359,6 +432,7 @@ void updateCount(int bagCount) {
         String historyOrderCode = completedOrderCode;
         String historyVehicleNumber = completedVehicleNumber;  // Sử dụng vehicleNumber đã lưu
         int historyPlannedQuantity = completedTargetCount;
+        String historyProductGroup = resolveHistoryProductGroup(completedOrderCode, completedProductCode, completedProductName);
 
         // Append new entry with fields the web expects
         JsonObject newEntry = histArr.createNestedObject();
@@ -368,6 +442,7 @@ void updateCount(int bagCount) {
         newEntry["customerName"] = historyCustomerName;
         newEntry["productName"] = historyProductName;
         newEntry["productCode"] = completedProductCode;
+        newEntry["productGroup"] = historyProductGroup;
         newEntry["orderCode"] = historyOrderCode;
         newEntry["vehicleNumber"] = historyVehicleNumber;
         newEntry["plannedQuantity"] = historyPlannedQuantity;

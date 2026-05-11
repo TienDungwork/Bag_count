@@ -543,6 +543,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         obj["conveyor"] = v["conveyor"] | "";
         obj["sensorTimeMs"] = v["sensorTimeMs"] | 0;
         obj["IsSyncServer"] = isSyncServer;
+        obj["syncServerAt"] = v["syncServerAt"] | "";
       }
     } else if (doc.is<JsonObject>()) {
       // Single object - normalize it into an array
@@ -578,6 +579,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       obj["conveyor"] = v["conveyor"] | "";
       obj["sensorTimeMs"] = v["sensorTimeMs"] | 0;
       obj["IsSyncServer"] = isSyncServer;
+      obj["syncServerAt"] = v["syncServerAt"] | "";
     }
 
     // Serialize normalized array and send
@@ -3038,12 +3040,11 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
 
         JsonArray incomingArray = incomingDoc.as<JsonArray>();
         for (JsonObject incomingEntry : incomingArray) {
-          if (incomingEntry.containsKey("IsSyncServer")) {
-            continue;
-          }
-
           bool foundExistingSyncFlag = false;
+          bool incomingSyncFlag = incomingEntry["IsSyncServer"] | false;
           bool existingSyncFlag = false;
+          String existingSyncServerAt = "";
+          String existingProductGroup = "";
           String incomingTimestamp = incomingEntry["timestamp"] | "";
           String incomingOrderCode = incomingEntry["orderCode"] | "";
           String incomingProductName = incomingEntry["productName"] | "";
@@ -3056,15 +3057,27 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
               bool sameRecord = existingTimestamp == incomingTimestamp &&
                                 existingOrderCode == incomingOrderCode &&
                                 existingProductName == incomingProductName;
-              if (sameRecord && existingEntry.containsKey("IsSyncServer")) {
-                existingSyncFlag = existingEntry["IsSyncServer"] | false;
-                foundExistingSyncFlag = true;
+              if (sameRecord) {
+                if (existingEntry.containsKey("IsSyncServer")) {
+                  existingSyncFlag = existingEntry["IsSyncServer"] | false;
+                  foundExistingSyncFlag = true;
+                }
+                existingSyncServerAt = existingEntry["syncServerAt"] | "";
+                existingProductGroup = existingEntry["productGroup"] | "";
                 break;
               }
             }
           }
 
-          incomingEntry["IsSyncServer"] = foundExistingSyncFlag ? existingSyncFlag : false;
+          incomingEntry["IsSyncServer"] = incomingSyncFlag || (foundExistingSyncFlag && existingSyncFlag);
+          if (!incomingEntry.containsKey("syncServerAt") && existingSyncServerAt.length() > 0) {
+            incomingEntry["syncServerAt"] = existingSyncServerAt;
+          }
+          if ((!incomingEntry.containsKey("productGroup") ||
+               String((const char*)(incomingEntry["productGroup"] | "")).length() == 0) &&
+              existingProductGroup.length() > 0) {
+            incomingEntry["productGroup"] = existingProductGroup;
+          }
         }
 
         normalizedData = "";

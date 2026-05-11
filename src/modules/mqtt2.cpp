@@ -65,6 +65,41 @@ static String mqtt2ProductGroupForHistory(JsonObject entry) {
 
   String entryProductCode = mqtt2JsonString(entry, "productCode");
   String entryProductName = mqtt2JsonString(entry, "productName");
+  String entryOrderCode = mqtt2JsonString(entry, "orderCode");
+
+  int bestScore = 0;
+  String bestOrderGroup = "";
+  for (size_t i = 0; i < ordersData.size(); i++) {
+    JsonArray orders = ordersData[i]["orders"];
+    for (JsonObject order : orders) {
+      String orderGroup = mqtt2JsonString(order, "productGroup");
+      if (orderGroup.length() == 0 && order.containsKey("product") && order["product"].is<JsonObject>()) {
+        JsonObject product = order["product"];
+        orderGroup = mqtt2JsonString(product, "group");
+      }
+      if (orderGroup.length() == 0) {
+        continue;
+      }
+
+      String orderProductCode = orderProductCodeFromJson(order);
+      String orderProductName = mqtt2JsonString(order, "productName");
+      String orderCodeValue = mqtt2JsonString(order, "orderCode");
+
+      int score = 0;
+      if (entryOrderCode.length() > 0 && orderCodeValue == entryOrderCode) score += 8;
+      if (entryProductCode.length() > 0 && orderProductCode == entryProductCode) score += 4;
+      if (entryProductName.length() > 0 && orderProductName == entryProductName) score += 2;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestOrderGroup = orderGroup;
+      }
+    }
+  }
+
+  if (bestOrderGroup.length() > 0) {
+    return bestOrderGroup;
+  }
 
   for (size_t i = 0; i < productsData.size(); i++) {
     JsonObject product = productsData[i];

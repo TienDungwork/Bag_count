@@ -377,36 +377,53 @@ async function loadOrdersFromESP32() {
 }
 
 // Load history từ ESP32
+function historyRecordKey(entry) {
+  return [
+    entry?.timestamp || '',
+    entry?.orderCode || '',
+    entry?.customerName || ''
+  ].join('||');
+}
+
+function isHistorySynced(entry) {
+  return entry?.IsSyncServer === true || entry?.IsSyncServer === 'true' || entry?.IsSyncServer === 1;
+}
+
 async function loadHistoryFromESP32() {
   try {
-    const response = await fetch('/api/history');
+    const response = await fetch('/api/history', { cache: 'no-store' });
     if (response.ok) {
       const esp32History = await response.json();
       console.log('🔄 ESP32 History Response:', esp32History);
       console.log('🔄 ESP32 History Length:', esp32History.length);
       
       if (Array.isArray(esp32History)) {
-        // Merge với history hiện tại và deduplicate
+        // Merge với history hiện tại, nhưng ưu tiên dữ liệu mới từ ESP32.
+        // Không bao giờ hạ trạng thái đã đồng bộ về chưa đồng bộ do cache cũ.
         const existingHistory = JSON.parse(localStorage.getItem('countingHistory') || '[]');
         console.log('📦 Existing LocalStorage History:', existingHistory.length, 'records');
         
         const allHistory = [...existingHistory, ...esp32History];
         console.log('🔗 Combined History Before Dedup:', allHistory.length, 'records');
         
-        // Deduplicate dựa trên timestamp và orderCode
-        const uniqueHistory = allHistory.filter((entry, index, arr) => {
-          const isDuplicate = arr.findIndex(e => 
-            e.timestamp === entry.timestamp &&
-            e.orderCode === entry.orderCode &&
-            e.customerName === entry.customerName
-          ) !== index;
+        const historyMap = new Map();
+        allHistory.forEach(entry => {
+          const key = historyRecordKey(entry);
+          const previous = historyMap.get(key);
 
-          if (isDuplicate) {
-            console.log('🗑️ Removing duplicate:', entry);
+          if (previous) {
+            console.log('🗑️ Merging duplicate:', entry);
           }
 
-          return !isDuplicate;
+          const merged = previous ? { ...previous, ...entry } : { ...entry };
+          merged.IsSyncServer = isHistorySynced(previous) || isHistorySynced(entry);
+          if (!merged.syncServerAt && previous?.syncServerAt) {
+            merged.syncServerAt = previous.syncServerAt;
+          }
+          historyMap.set(key, merged);
         });
+
+        const uniqueHistory = Array.from(historyMap.values());
         
         console.log('✅ Final Unique History:', uniqueHistory.length, 'records');
         console.log('✅ Final History Data:', uniqueHistory);
@@ -4183,6 +4200,7 @@ function updateHistoryTable() {
     let accuracyClass = 'accuracy-good';
     if (accuracy < 95) accuracyClass = 'accuracy-warning';
     if (accuracy < 90) accuracyClass = 'accuracy-error';
+    const synced = isHistorySynced(entry);
     
     row.innerHTML = `
       <td style="font-weight: 500;">${normalizeTimestamp(entry.timestamp).toLocaleString('vi-VN')}</td>
@@ -4194,9 +4212,9 @@ function updateHistoryTable() {
       <td style="text-align: center;">${entry.vehicleNumber || 'N/A'}</td>
       <td style="font-weight: 500;">${entry.productName}</td>
       <td style="text-align: center;">
-        <span class="status-indicator ${entry.IsSyncServer ? 'status-completed' : 'status-warning'}">
-          <i class="fas fa-${entry.IsSyncServer ? 'check-circle' : 'clock'}"></i>
-          ${entry.IsSyncServer ? 'Đã đẩy' : 'Chưa đẩy'}
+        <span class="status-indicator ${synced ? 'status-completed' : 'status-warning'}">
+          <i class="fas fa-${synced ? 'check-circle' : 'clock'}"></i>
+          ${synced ? 'Đã đẩy' : 'Chưa đẩy'}
         </span>
       </td>
       <td class="number-cell" style="color: #333;">${entry.plannedQuantity}</td>
@@ -5954,6 +5972,7 @@ function updateHistoryTableWithData(historyData) {
     // Get product display with code + name
     const product = currentProducts.find(p => p.name === entry.productName);
     const productDisplay = product && product.code ? `${product.code} - ${product.name}` : (entry.productName || 'N/A');
+    const synced = isHistorySynced(entry);
     
     row.innerHTML = `
       <td>${new Date(entry.timestamp).toLocaleString('vi-VN')}</td>
@@ -5964,9 +5983,9 @@ function updateHistoryTableWithData(historyData) {
       <td>${entry.vehicleNumber || 'N/A'}</td>
       <td>${productDisplay}</td>
       <td style="text-align: center;">
-        <span class="status-indicator ${entry.IsSyncServer ? 'status-completed' : 'status-warning'}">
-          <i class="fas fa-${entry.IsSyncServer ? 'check-circle' : 'clock'}"></i>
-          ${entry.IsSyncServer ? 'Đã đẩy' : 'Chưa đẩy'}
+        <span class="status-indicator ${synced ? 'status-completed' : 'status-warning'}">
+          <i class="fas fa-${synced ? 'check-circle' : 'clock'}"></i>
+          ${synced ? 'Đã đẩy' : 'Chưa đẩy'}
         </span>
       </td>
       <td><strong>${entry.plannedQuantity}</strong></td>
@@ -7639,8 +7658,8 @@ function showTabInternal(tabName) {
       updateOverview();
       break;
     case 'history':
-      // Refresh history UI whenever user opens the History tab
-      updateHistoryTable();
+      // Refresh from ESP32 whenever user opens the History tab so sync status is current.
+      loadHistoryFromESP32();
       break;
     case 'product':
       updateProductGroupSelect();
