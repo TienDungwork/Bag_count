@@ -583,9 +583,11 @@ String getIsoTimeStr() {
     return "";
   }
 
-  struct tm* t = gmtime(&now);
-  char buf[32];
-  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", t);
+  // Giờ địa phương (NTP đã configTime +7 ở setupTime), khớp web và trường MQTT2 StartTime.
+  // Trước đây dùng gmtime + Z nên lệch 7h so với màn hình ESP32 tại VN.
+  struct tm* t = localtime(&now);
+  char buf[40];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S+07:00", t);
   return String(buf);
 }
 
