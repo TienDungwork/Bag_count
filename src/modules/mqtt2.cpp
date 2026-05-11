@@ -14,6 +14,13 @@ static String mqtt2ClientId() {
   return String(id);
 }
 
+static String mqtt2SanitizedKeyLoginClientId() {
+  String clientId = mqtt2_password;
+  clientId.trim();
+  clientId.replace("-", "");
+  return clientId;
+}
+
 static bool connectMQTT2WithClientId(const String& clientId, const String& statusTopic,
                                      const char* offlinePayload) {
   String displayClientId = clientId.length() > 0 ? clientId : "(empty - broker assigned)";
@@ -253,6 +260,7 @@ void setupMQTT2() {
   
   String keyLoginClientId = mqtt2_password;
   keyLoginClientId.trim();
+  String sanitizedKeyLoginClientId = mqtt2SanitizedKeyLoginClientId();
   String chipClientId = mqtt2ClientId();
   
   Serial.print("Connecting to MQTT broker 2: ");
@@ -263,9 +271,13 @@ void setupMQTT2() {
   String statusTopic = mqtt2Topic("status");
   const char* offlinePayload = "{\"status\":\"offline\"}";
 
-  bool connected = connectMQTT2WithClientId(keyLoginClientId, statusTopic, offlinePayload);
+  bool connected = connectMQTT2WithClientId(sanitizedKeyLoginClientId, statusTopic, offlinePayload);
 
-  if (!connected && mqtt2.state() == 2 && chipClientId != keyLoginClientId) {
+  if (!connected && mqtt2.state() == 2 && keyLoginClientId != sanitizedKeyLoginClientId) {
+    connected = connectMQTT2WithClientId(keyLoginClientId, statusTopic, offlinePayload);
+  }
+
+  if (!connected && mqtt2.state() == 2 && chipClientId != sanitizedKeyLoginClientId && chipClientId != keyLoginClientId) {
     connected = connectMQTT2WithClientId(chipClientId, statusTopic, offlinePayload);
   }
 
