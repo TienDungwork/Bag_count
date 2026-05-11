@@ -528,6 +528,7 @@ void setupRealtimeTransport();
 void setupMQTT2();
 void onMqttMessage2(char* topic, byte* payload, unsigned int length);
 void publishMQTT2OrderComplete();
+void processMQTT2SyncQueue();
 void setupTime();
 String getTimeStr();
 void broadcastRealtimeMessage(const char* topic, const String& payloadJson);

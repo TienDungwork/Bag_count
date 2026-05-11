@@ -1,6 +1,213 @@
 #include "mqtt2.h"
 
 //----------------------------------------MQTT2 Setup và Functions (Server anh Dũng)
+static String mqtt2JsonString(JsonObject obj, const char* key);
+
+static String mqtt2Topic(const char* action) {
+  return "devices/" + mqtt2_password + "/" + String(action);
+}
+
+static bool publishMQTT2ConnectionStatus(bool online) {
+  if (mqtt2_password.length() == 0 || !mqtt2.connected()) {
+    return false;
+  }
+
+  String topic = mqtt2Topic("status");
+  String payload = online ? "{\"status\":\"online\"}" : "{\"status\":\"offline\"}";
+  bool published = mqtt2.publish(topic.c_str(), payload.c_str(), true);
+
+  if (published) {
+    Serial.println("MQTT2 status published:");
+    Serial.println("Topic: " + topic);
+    Serial.println("Data: " + payload);
+  } else {
+    Serial.println("MQTT2 status publish failed, rc=" + String(mqtt2.state()));
+    Serial.println("Topic: " + topic);
+  }
+
+  return published;
+}
+
+static String mqtt2ProductGroupForHistory(JsonObject entry) {
+  String group = mqtt2JsonString(entry, "productGroup");
+  if (group.length() > 0) {
+    return group;
+  }
+
+  String entryProductCode = mqtt2JsonString(entry, "productCode");
+  String entryProductName = mqtt2JsonString(entry, "productName");
+
+  for (size_t i = 0; i < productsData.size(); i++) {
+    JsonObject product = productsData[i];
+    String catalogProductCode = mqtt2JsonString(product, "code");
+    String catalogProductName = mqtt2JsonString(product, "name");
+    bool codeMatch = entryProductCode.length() > 0 && catalogProductCode == entryProductCode;
+    bool nameMatch = entryProductName.length() > 0 && catalogProductName == entryProductName;
+
+    if (codeMatch || nameMatch) {
+      return mqtt2JsonString(product, "group");
+    }
+  }
+
+  return "";
+}
+
+static int mqtt2SetModeForHistory(JsonObject entry) {
+  if (entry.containsKey("setModeNumber")) {
+    return entry["setModeNumber"].as<int>();
+  }
+
+  String mode = mqtt2JsonString(entry, "setMode");
+  if (mode == "input") {
+    return 1;
+  }
+  if (mode == "output") {
+    return 2;
+  }
+
+  return currentMode == "input" ? 1 : 2;
+}
+
+static bool ensureMQTT2Connected() {
+  if (currentNetworkMode == WIFI_AP_MODE || mqtt2_password.length() == 0) {
+    return false;
+  }
+
+  if (!mqtt2.connected()) {
+    setupMQTT2();
+  }
+
+  return mqtt2.connected();
+}
+
+static bool publishMQTT2HistoryEntry(JsonObject entry) {
+  if (!ensureMQTT2Connected()) {
+    Serial.println("MQTT2 sync: broker not connected, will retry later");
+    return false;
+  }
+
+  String topic = mqtt2Topic("Transaction");
+
+  String payloadName = mqtt2JsonString(entry, "batchName");
+  if (payloadName.length() == 0) {
+    payloadName = mqtt2JsonString(entry, "orderCode");
+  }
+  if (payloadName.length() == 0) {
+    payloadName = mqtt2JsonString(entry, "productName");
+  }
+
+  String startTime = mqtt2JsonString(entry, "startTime");
+  if (startTime.length() == 0) {
+    startTime = mqtt2JsonString(entry, "timestamp");
+  }
+
+  String entryLocation = mqtt2JsonString(entry, "location");
+  if (entryLocation.length() == 0) {
+    entryLocation = location;
+  }
+
+  DynamicJsonDocument doc(1024);
+  doc["Name"] = payloadName;
+  doc["OrderCode"] = mqtt2JsonString(entry, "orderCode");
+  doc["ProductName"] = mqtt2JsonString(entry, "productName");
+  doc["ProductGroup"] = mqtt2ProductGroupForHistory(entry);
+  doc["ProductCode"] = mqtt2JsonString(entry, "productCode");
+  doc["CustomerName"] = mqtt2JsonString(entry, "customerName");
+  doc["CustomerPhone"] = mqtt2JsonString(entry, "customerPhone");
+  doc["StartTime"] = startTime;
+  doc["SetMode"] = mqtt2SetModeForHistory(entry);
+  doc["Location"] = entryLocation;
+  doc["PlannedCount"] = entry["plannedQuantity"] | entry["planned"] | entry["target"] | 0;
+  doc["ActualCount"] = entry["actualCount"] | entry["actual"] | entry["count"] | 0;
+
+  String message;
+  serializeJson(doc, message);
+
+  bool published = mqtt2.publish(topic.c_str(), message.c_str());
+  if (published) {
+    Serial.println("MQTT2 sync published history entry:");
+    Serial.println("Topic: " + topic);
+    Serial.println("Data: " + message);
+  } else {
+    Serial.println("MQTT2 sync publish failed, rc=" + String(mqtt2.state()) +
+                   ", payloadLen=" + String(message.length()) +
+                   ", bufferSize=" + String(mqtt2.getBufferSize()));
+    Serial.println("Topic: " + topic);
+    Serial.println("Data: " + message);
+  }
+
+  return published;
+}
+
+void processMQTT2SyncQueue() {
+  static unsigned long lastSyncAttempt = 0;
+  const unsigned long syncIntervalMs = 5000;
+
+  if (millis() - lastSyncAttempt < syncIntervalMs) {
+    return;
+  }
+  lastSyncAttempt = millis();
+
+  if (currentNetworkMode == WIFI_AP_MODE || mqtt2_password.length() == 0) {
+    return;
+  }
+
+  if (!LittleFS.exists("/history.json")) {
+    return;
+  }
+
+  if (!ensureMQTT2Connected()) {
+    return;
+  }
+
+  File file = LittleFS.open("/history.json", "r");
+  if (!file) {
+    Serial.println("MQTT2 sync: cannot open /history.json for reading");
+    return;
+  }
+
+  String content = file.readString();
+  file.close();
+
+  DynamicJsonDocument doc(16384);
+  DeserializationError err = deserializeJson(doc, content);
+  if (err || !doc.is<JsonArray>()) {
+    Serial.println("MQTT2 sync: invalid /history.json, cannot parse queue");
+    return;
+  }
+
+  JsonArray historyArray = doc.as<JsonArray>();
+  for (JsonObject entry : historyArray) {
+    bool isSynced = entry["IsSyncServer"] | false;
+    if (isSynced) {
+      continue;
+    }
+
+    String orderCodeToSync = mqtt2JsonString(entry, "orderCode");
+    Serial.println("MQTT2 sync: found unsynced history entry, orderCode=" + orderCodeToSync);
+
+    if (!publishMQTT2HistoryEntry(entry)) {
+      return;
+    }
+
+    entry["IsSyncServer"] = true;
+    entry["syncServerAt"] = getTimeStr();
+
+    File out = LittleFS.open("/history.json", "w");
+    if (!out) {
+      Serial.println("MQTT2 sync: publish succeeded but cannot mark history as synced");
+      return;
+    }
+
+    size_t written = serializeJson(doc, out);
+    out.close();
+    Serial.println("MQTT2 sync: marked one history entry as synced, bytes written: " + String(written));
+    return;
+  }
+}
+
+//----------------------------------------MQTT2 Setup và Functions (Server anh Dũng)
+
 void setupMQTT2() {
   // KIỂM TRA NETWORK MODE - Chỉ hoạt động khi có Internet
   if (currentNetworkMode == WIFI_AP_MODE) {
@@ -18,7 +225,7 @@ void setupMQTT2() {
   
   mqtt2.setServer(mqtt_server2.c_str(), mqtt_port2);
   mqtt2.setCallback(onMqttMessage2);
-  mqtt2.setBufferSize(1024);
+  mqtt2.setBufferSize(2048);
   mqtt2.setKeepAlive(60);
   
   // Tạo client ID random như khuyến nghị
@@ -29,11 +236,16 @@ void setupMQTT2() {
   Serial.println("Username: " + mqtt2_username);
   Serial.println("KeyLogin: " + mqtt2_password);
   
-  // Kết nối với username/password (đơn giản, không cần LWT)
-  if (mqtt2.connect(clientId2.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str())) {
+  String statusTopic = mqtt2Topic("status");
+  const char* offlinePayload = "{\"status\":\"offline\"}";
+
+  // Kết nối với username/password và LWT để broker tự báo offline nếu thiết bị mất kết nối.
+  if (mqtt2.connect(clientId2.c_str(), mqtt2_username.c_str(), mqtt2_password.c_str(),
+                    statusTopic.c_str(), 0, true, offlinePayload)) {
     Serial.println("MQTT Client 2 connected successfully!");
     Serial.println("Kết nối broker " + mqtt_server2 + ":" + String(mqtt_port2) + " thành công!");
-    
+
+    publishMQTT2ConnectionStatus(true);
   } else {
     Serial.println("MQTT Client 2 connection failed, rc=" + String(mqtt2.state()));
     
@@ -188,7 +400,7 @@ void publishMQTT2OrderComplete() {
   }
   
   // Tạo topic theo format: devices/{KeyLogin}/Transaction
-  String mqtt2_topic_transaction = "devices/" + mqtt2_password + "/Transaction";
+  String mqtt2_topic_transaction = mqtt2Topic("Transaction");
   
   DynamicJsonDocument doc(1024);
   
@@ -233,7 +445,9 @@ void publishMQTT2OrderComplete() {
     Serial.println("Topic: " + mqtt2_topic_transaction);
     Serial.println("Data: " + message);
   } else {
-    Serial.println("MQTT2 Order Complete publish failed!");
+    Serial.println("MQTT2 Order Complete publish failed, rc=" + String(mqtt2.state()) +
+                   ", payloadLen=" + String(message.length()) +
+                   ", bufferSize=" + String(mqtt2.getBufferSize()));
     Serial.println("Topic: " + mqtt2_topic_transaction);
     Serial.println("Data: " + message);
   }

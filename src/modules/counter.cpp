@@ -327,7 +327,7 @@ void updateCount(int bagCount) {
       // Persist the new history entry to LittleFS (/history.json) immediately
       // so the ESP32 keeps a local record even if the web UI doesn't push history.
       {
-        DynamicJsonDocument histDoc(4096);
+        DynamicJsonDocument histDoc(16384);
         JsonArray histArr;
 
         // Load existing history.json if present
@@ -363,13 +363,21 @@ void updateCount(int bagCount) {
         // Append new entry with fields the web expects
         JsonObject newEntry = histArr.createNestedObject();
         newEntry["timestamp"] = currentTime;
+        newEntry["startTime"] = startTimeStr;
         newEntry["customerName"] = historyCustomerName;
         newEntry["productName"] = historyProductName;
+        newEntry["productCode"] = completedProductCode;
         newEntry["orderCode"] = historyOrderCode;
         newEntry["vehicleNumber"] = historyVehicleNumber;
         newEntry["plannedQuantity"] = historyPlannedQuantity;
         newEntry["actualCount"] = completedTargetCount;  // Thực tế = mục tiêu khi hoàn thành
         newEntry["batchType"] = completedProductName;
+        newEntry["batchName"] = currentBatchName;
+        newEntry["setMode"] = currentMode;
+        newEntry["location"] = location;
+        newEntry["conveyor"] = conveyorName;
+        newEntry["sensorTimeMs"] = lastMeasuredTime;
+        newEntry["IsSyncServer"] = false;
 
         // Save back to file
         File wf = LittleFS.open("/history.json", "w");
@@ -406,8 +414,7 @@ void updateCount(int bagCount) {
       // MQTT: Publish final status
       publishStatusMQTT();
       
-      // MQTT2: Publish order completion data
-      publishMQTT2OrderComplete();
+      // MQTT2 server sync is handled by the background queue worker.
       
       // Auto Reset nếu được bật từ settings - CHỈ RESET ĐƠN HÀNG HIỆN TẠI
       // THÊM CHECK: Chỉ auto reset khi thực sự hoàn thành đơn hàng (target > 0 và đã đếm xong)

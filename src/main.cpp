@@ -624,6 +624,7 @@ void loop() {
     } else {
       // MQTT2 connected - handle messages
       mqtt2.loop();
+      processMQTT2SyncQueue();
     }
   }
   

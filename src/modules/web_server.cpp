@@ -517,19 +517,31 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         const char* timestamp = v["timestamp"] | v["time"] | "";
         const char* customer = v["customerName"] | v["customer"] | "";
         const char* product = v["productName"] | v["product"] | v["batchType"] | "";
+        const char* productCode = v["productCode"] | "";
+        const char* productGroup = v["productGroup"] | "";
         const char* orderCode = v["orderCode"] | "";
         const char* vehicle = v["vehicleNumber"] | v["vehicle"] | "";
         int planned = v["plannedQuantity"] | v["plannedQuantity"] | v["planned"] | v["target"] | 0;
         int actual = v["actualCount"] | v["actual"] | v["totalCounted"] | v["count"] | 0;
+        bool isSyncServer = v["IsSyncServer"] | false;
 
         obj["timestamp"] = timestamp;
+        obj["startTime"] = v["startTime"] | timestamp;
         obj["customerName"] = customer;
         obj["productName"] = product;
+        obj["productCode"] = productCode;
+        obj["productGroup"] = productGroup;
         obj["orderCode"] = orderCode;
         obj["vehicleNumber"] = vehicle;
         obj["plannedQuantity"] = planned;
         obj["actualCount"] = actual;
         obj["isBatch"] = v["isBatch"] | false;
+        obj["batchName"] = v["batchName"] | "";
+        obj["setMode"] = v["setMode"] | "";
+        obj["location"] = v["location"] | "";
+        obj["conveyor"] = v["conveyor"] | "";
+        obj["sensorTimeMs"] = v["sensorTimeMs"] | 0;
+        obj["IsSyncServer"] = isSyncServer;
       }
     } else if (doc.is<JsonObject>()) {
       // Single object - normalize it into an array
@@ -539,19 +551,31 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       const char* timestamp = v["timestamp"] | v["time"] | "";
       const char* customer = v["customerName"] | v["customer"] | "";
       const char* product = v["productName"] | v["product"] | v["batchType"] | "";
+      const char* productCode = v["productCode"] | "";
+      const char* productGroup = v["productGroup"] | "";
       const char* orderCode = v["orderCode"] | "";
       const char* vehicle = v["vehicleNumber"] | v["vehicle"] | "";
       int planned = v["plannedQuantity"] | v["plannedQuantity"] | v["planned"] | v["target"] | 0;
       int actual = v["actualCount"] | v["actual"] | v["totalCounted"] | v["count"] | 0;
+      bool isSyncServer = v["IsSyncServer"] | false;
 
       obj["timestamp"] = timestamp;
+      obj["startTime"] = v["startTime"] | timestamp;
       obj["customerName"] = customer;
       obj["productName"] = product;
+      obj["productCode"] = productCode;
+      obj["productGroup"] = productGroup;
       obj["orderCode"] = orderCode;
       obj["vehicleNumber"] = vehicle;
       obj["plannedQuantity"] = planned;
       obj["actualCount"] = actual;
       obj["isBatch"] = v["isBatch"] | false;
+      obj["batchName"] = v["batchName"] | "";
+      obj["setMode"] = v["setMode"] | "";
+      obj["location"] = v["location"] | "";
+      obj["conveyor"] = v["conveyor"] | "";
+      obj["sensorTimeMs"] = v["sensorTimeMs"] | 0;
+      obj["IsSyncServer"] = isSyncServer;
     }
 
     // Serialize normalized array and send
@@ -2989,10 +3013,66 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println(jsonData);
       }
 
+      String normalizedData = jsonData;
+      DynamicJsonDocument incomingDoc(16384);
+      DeserializationError incomingErr = deserializeJson(incomingDoc, jsonData);
+      if (!incomingErr && incomingDoc.is<JsonArray>()) {
+        DynamicJsonDocument existingDoc(16384);
+        JsonArray existingArray;
+
+        if (LittleFS.exists("/history.json")) {
+          File existingFile = LittleFS.open("/history.json", "r");
+          if (existingFile) {
+            String existingContent = existingFile.readString();
+            existingFile.close();
+            DeserializationError existingErr = deserializeJson(existingDoc, existingContent);
+            if (!existingErr && existingDoc.is<JsonArray>()) {
+              existingArray = existingDoc.as<JsonArray>();
+            }
+          }
+        }
+
+        JsonArray incomingArray = incomingDoc.as<JsonArray>();
+        for (JsonObject incomingEntry : incomingArray) {
+          if (incomingEntry.containsKey("IsSyncServer")) {
+            continue;
+          }
+
+          bool foundExistingSyncFlag = false;
+          bool existingSyncFlag = false;
+          String incomingTimestamp = incomingEntry["timestamp"] | "";
+          String incomingOrderCode = incomingEntry["orderCode"] | "";
+          String incomingProductName = incomingEntry["productName"] | "";
+
+          if (!existingArray.isNull()) {
+            for (JsonObject existingEntry : existingArray) {
+              String existingTimestamp = existingEntry["timestamp"] | "";
+              String existingOrderCode = existingEntry["orderCode"] | "";
+              String existingProductName = existingEntry["productName"] | "";
+              bool sameRecord = existingTimestamp == incomingTimestamp &&
+                                existingOrderCode == incomingOrderCode &&
+                                existingProductName == incomingProductName;
+              if (sameRecord && existingEntry.containsKey("IsSyncServer")) {
+                existingSyncFlag = existingEntry["IsSyncServer"] | false;
+                foundExistingSyncFlag = true;
+                break;
+              }
+            }
+          }
+
+          incomingEntry["IsSyncServer"] = foundExistingSyncFlag ? existingSyncFlag : false;
+        }
+
+        normalizedData = "";
+        serializeJson(incomingDoc, normalizedData);
+      } else {
+        Serial.println("History POST payload is not a JSON array; saving raw payload");
+      }
+
       // Lưu trực tiếp vào file
       File file = LittleFS.open("/history.json", "w");
       if (file) {
-        size_t written = file.print(jsonData);
+        size_t written = file.print(normalizedData);
         file.close();
         Serial.println("History saved to ESP32, bytes written: " + String(written));
         server.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"History saved\"}");
