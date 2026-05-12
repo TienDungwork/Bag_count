@@ -347,8 +347,14 @@ void updateCount(int bagCount) {
         // Cập nhật executeCount CHỈ cho đơn hàng ĐANG counting
         if (orderProductName == bagType && orderProductCode == productCode && selected && status == "counting") {
           int currentExecuteCount = order["executeCount"] | 0;
-          order["executeCount"] = currentExecuteCount + bagCount;
-          Serial.println("Updated executeCount for counting order '" + bagType + "' (code: " + productCode + ") from " + String(currentExecuteCount) + " to " + String(currentExecuteCount + bagCount));
+          int currentCurrentCount = order["currentCount"] | 0;
+          int nextCount = currentExecuteCount + bagCount;
+          if (currentCurrentCount > currentExecuteCount) {
+            nextCount = currentCurrentCount + bagCount;
+          }
+          order["currentCount"] = nextCount;
+          order["executeCount"] = nextCount;
+          Serial.println("Updated saved count for counting order '" + bagType + "' (code: " + productCode + ") from currentCount=" + String(currentCurrentCount) + ", executeCount=" + String(currentExecuteCount) + " to " + String(nextCount));
           break;
         }
       }
@@ -392,6 +398,7 @@ void updateCount(int bagCount) {
       String completedProductCode = productCode;
       String completedVehicleNumber = vehicleNumber;
       int completedTargetCount = targetCount;
+      int completedActualCount = totalCount;
       
       // Lưu lịch sử với thêm thông tin loại - chỉ khi có thời gian thực
       String currentTime = (time(nullptr) > 24 * 3600) ? getTimeStr() : "Time not synced";
@@ -448,7 +455,7 @@ void updateCount(int bagCount) {
         newEntry["orderCode"] = historyOrderCode;
         newEntry["vehicleNumber"] = historyVehicleNumber;
         newEntry["plannedQuantity"] = historyPlannedQuantity;
-        newEntry["actualCount"] = completedTargetCount;  // Thực tế = mục tiêu khi hoàn thành
+        newEntry["actualCount"] = completedActualCount;
         newEntry["batchType"] = completedProductName;
         newEntry["batchName"] = currentBatchName;
         newEntry["setMode"] = currentMode;

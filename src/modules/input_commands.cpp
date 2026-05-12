@@ -171,6 +171,12 @@ void loadCurrentOrderForDisplay() {
         
         int quantity = order["quantity"] | 20;
         int warningQuantity = order["warningQuantity"].as<int>() | 5; // Mặc định 5 nếu không có
+        int savedCurrentCount = order["currentCount"] | 0;
+        int savedExecuteCount = order["executeCount"] | 0;
+        int restoredCount = savedCurrentCount > savedExecuteCount ? savedCurrentCount : savedExecuteCount;
+        if (restoredCount < 0) {
+          restoredCount = 0;
+        }
         
         bagType = productName;
         productCode = productCodeFromOrder;
@@ -186,6 +192,14 @@ void loadCurrentOrderForDisplay() {
         }
         
         targetCount = quantity;
+        totalCount = restoredCount;
+        if (isRunning && status != "counting") {
+          order["status"] = "counting";
+          order["currentCount"] = restoredCount;
+          order["executeCount"] = restoredCount;
+          saveOrdersToFile();
+          Serial.println("Resumed selected order as counting with saved count: " + String(restoredCount));
+        }
         
         // Cập nhật bagConfig với warningQuantity từ order
         for (auto& cfg : bagConfigs) {
@@ -202,6 +216,7 @@ void loadCurrentOrderForDisplay() {
         Serial.println("   Code: " + productCodeFromOrder);
         Serial.println("   Target: " + String(quantity));
         Serial.println("   Warning: " + String(warningQuantity));
+        Serial.println("   Restored Count: " + String(totalCount) + " (currentCount=" + String(savedCurrentCount) + ", executeCount=" + String(savedExecuteCount) + ")");
         
         needUpdate = true;
         return;

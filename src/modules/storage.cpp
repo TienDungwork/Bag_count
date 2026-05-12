@@ -543,6 +543,84 @@ void loadProductsFromFile() {
   }
 }
 
+static const char* ORDERS_FILE = "/orders.json";
+static const char* ORDERS_TMP_FILE = "/orders.tmp";
+static const char* ORDERS_BAK_FILE = "/orders.bak";
+
+static bool verifyJsonArrayFile(const char* path) {
+  File file = LittleFS.open(path, "r");
+  if (!file) {
+    Serial.println("Cannot open file for JSON verification: " + String(path));
+    return false;
+  }
+
+  DynamicJsonDocument verifyDoc(65536);
+  DeserializationError error = deserializeJson(verifyDoc, file);
+  file.close();
+
+  if (error) {
+    Serial.println("JSON verification failed for " + String(path) + ": " + String(error.c_str()));
+    return false;
+  }
+  if (!verifyDoc.is<JsonArray>()) {
+    Serial.println("JSON verification failed for " + String(path) + ": root is not array");
+    return false;
+  }
+
+  return true;
+}
+
+static bool loadOrdersFromPath(const char* path) {
+  File file = LittleFS.open(path, "r");
+  if (!file) {
+    Serial.println("Failed to open " + String(path));
+    return false;
+  }
+
+  ordersData.clear();
+  DeserializationError error = deserializeJson(ordersData, file);
+  file.close();
+
+  if (error || !ordersData.is<JsonArray>()) {
+    Serial.println("Failed to parse " + String(path) + ": " + String(error.c_str()));
+    ordersData.clear();
+    ordersData.to<JsonArray>();
+    return false;
+  }
+
+  Serial.println("Orders loaded from " + String(path));
+  Serial.println("   Found " + String(ordersData.size()) + " orders");
+  return true;
+}
+
+static bool replaceOrdersFileWithTmp() {
+  if (!LittleFS.exists(ORDERS_TMP_FILE)) {
+    Serial.println("Cannot replace orders file: temp file missing");
+    return false;
+  }
+
+  if (LittleFS.exists(ORDERS_BAK_FILE)) {
+    LittleFS.remove(ORDERS_BAK_FILE);
+  }
+
+  bool hadOrdersFile = LittleFS.exists(ORDERS_FILE);
+  if (hadOrdersFile && !LittleFS.rename(ORDERS_FILE, ORDERS_BAK_FILE)) {
+    Serial.println("Failed to move current orders.json to orders.bak");
+    return false;
+  }
+
+  if (!LittleFS.rename(ORDERS_TMP_FILE, ORDERS_FILE)) {
+    Serial.println("Failed to promote orders.tmp to orders.json");
+    if (hadOrdersFile && LittleFS.exists(ORDERS_BAK_FILE)) {
+      LittleFS.rename(ORDERS_BAK_FILE, ORDERS_FILE);
+      Serial.println("Restored orders.json from orders.bak after failed promote");
+    }
+    return false;
+  }
+
+  return true;
+}
+
 void saveOrdersToFile() {
   Serial.println("ordersData size: " + String(ordersData.size()) + " items");
   
@@ -577,70 +655,92 @@ void saveOrdersToFile() {
     Serial.println("Completed orders auto-removed before saving.");
   }
   
-  File file = LittleFS.open("/orders.json", "w");
+  if (LittleFS.exists(ORDERS_TMP_FILE)) {
+    LittleFS.remove(ORDERS_TMP_FILE);
+  }
+
+  File file = LittleFS.open(ORDERS_TMP_FILE, "w");
   if (file) {
     size_t bytesWritten = serializeJson(ordersData, file);
+    file.flush();
     file.close();
-    
-    Serial.println("Orders saved to /orders.json");
-    Serial.println("File size: " + String(bytesWritten) + " bytes");
 
-    // Đọc lại file để đảm bảo đã lưu thành công
-    File verifyFile = LittleFS.open("/orders.json", "r");
-    if (verifyFile) {
-      String content = verifyFile.readString();
-      verifyFile.close();
-      Serial.println(content.substring(0, min(200, (int)content.length())));
-      
-      if (content.length() > 10) { 
-        Serial.println("Orders file saved successfully");
-      } else {
-        Serial.println("Orders file empty after save!");
-      }
+    Serial.println("Orders written to /orders.tmp");
+    Serial.println("Temp file size: " + String(bytesWritten) + " bytes");
+
+    if (bytesWritten == 0 || !verifyJsonArrayFile(ORDERS_TMP_FILE)) {
+      Serial.println("Orders temp file invalid; keeping previous /orders.json");
+      LittleFS.remove(ORDERS_TMP_FILE);
+      return;
+    }
+
+    if (replaceOrdersFileWithTmp()) {
+      Serial.println("Orders saved atomically to /orders.json");
+      Serial.println("Previous valid file kept as /orders.bak");
     } else {
-      Serial.println("Cannot read back orders file!");
+      Serial.println("Atomic orders save failed; previous /orders.json kept when possible");
+      LittleFS.remove(ORDERS_TMP_FILE);
     }
   } else {
-    Serial.println("Failed to open /orders.json for writing");
+    Serial.println("Failed to open /orders.tmp for writing");
   }
 }
 
 void loadOrdersFromFile() {
+  // Nếu mất điện sau khi ghi xong orders.tmp nhưng trước bước promote, tmp là bản mới nhất.
+  if (LittleFS.exists(ORDERS_TMP_FILE)) {
+    if (verifyJsonArrayFile(ORDERS_TMP_FILE)) {
+      Serial.println("Found valid orders.tmp from interrupted save - promoting it");
+      replaceOrdersFileWithTmp();
+    } else {
+      Serial.println("Removing invalid stale orders.tmp");
+      LittleFS.remove(ORDERS_TMP_FILE);
+    }
+  }
+
   // ĐẢMBẢO FILE TỒN TẠI - TẠO NẾU CHƯA CÓ
-  if (!LittleFS.exists("/orders.json")) {
+  if (!LittleFS.exists(ORDERS_FILE)) {
+    if (LittleFS.exists(ORDERS_BAK_FILE) && loadOrdersFromPath(ORDERS_BAK_FILE)) {
+      LittleFS.rename(ORDERS_BAK_FILE, ORDERS_FILE);
+      Serial.println("Restored missing orders.json from orders.bak");
+      return;
+    }
+
     Serial.println("orders.json not found - creating empty orders file");
-    File file = LittleFS.open("/orders.json", "w");
+    File file = LittleFS.open(ORDERS_FILE, "w");
     if (file) {
       file.println("[]");
+      file.flush();
       file.close();
       Serial.println("Empty orders.json created");
     }
   }
   
-  //  LUÔN LOAD TỪ FILE
-  File file = LittleFS.open("/orders.json", "r");
-  if (file) {
-    DeserializationError error = deserializeJson(ordersData, file);
-    file.close();
-    
-    if (error) {
-      Serial.println("Failed to parse orders.json: " + String(error.c_str()) + " - recreating file");
-      File newFile = LittleFS.open("/orders.json", "w");
-      if (newFile) {
-        newFile.println("[]");
-        newFile.close();
-      }
-      ordersData.clear();
-      ordersData.to<JsonArray>();
-    } else {
-      Serial.println("Orders loaded from /orders.json");
-      Serial.println("   Found " + String(ordersData.size()) + " orders");
-    }
-  } else {
-    Serial.println("Failed to open orders.json - creating empty array");
-    ordersData.clear();
-    ordersData.to<JsonArray>();
+  //  LUÔN LOAD TỪ FILE, fallback sang backup nếu file chính lỗi do mất điện
+  if (loadOrdersFromPath(ORDERS_FILE)) {
+    return;
   }
+
+  Serial.println("orders.json invalid - trying orders.bak");
+  if (LittleFS.exists(ORDERS_BAK_FILE) && loadOrdersFromPath(ORDERS_BAK_FILE)) {
+    LittleFS.remove(ORDERS_FILE);
+    if (LittleFS.rename(ORDERS_BAK_FILE, ORDERS_FILE)) {
+      Serial.println("Restored orders.json from valid orders.bak");
+    } else {
+      Serial.println("Loaded orders.bak but could not promote it to orders.json");
+    }
+    return;
+  }
+
+  Serial.println("No valid orders file found - recreating empty orders.json");
+  File newFile = LittleFS.open(ORDERS_FILE, "w");
+  if (newFile) {
+    newFile.println("[]");
+    newFile.flush();
+    newFile.close();
+  }
+  ordersData.clear();
+  ordersData.to<JsonArray>();
 }
 
 void addNewProduct(String code, String name) {

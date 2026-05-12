@@ -120,6 +120,7 @@ void setup() {
   isCountingEnabled = false;
   isLimitReached = false;
   totalCount = 0;
+  loadCurrentOrderForDisplay(); // Restore saved progress from /orders.json after an unexpected reboot.
   
   // BƯỚC 5: Khởi tạo LED Matrix display TRƯỚC network
   Serial.println("Initializing LED Matrix display...");
