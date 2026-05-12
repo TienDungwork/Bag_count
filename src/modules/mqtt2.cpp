@@ -144,7 +144,7 @@ static bool ensureMQTT2Connected() {
   return mqtt2.connected();
 }
 
-static bool publishMQTT2HistoryEntry(JsonObject entry) {
+bool publishMQTT2HistoryEntry(JsonObject entry) {
   if (!ensureMQTT2Connected()) {
     Serial.println("MQTT2 sync: broker not connected, will retry later");
     return false;

@@ -530,6 +530,7 @@ void setupRealtimeTransport();
 
 void setupMQTT2();
 void onMqttMessage2(char* topic, byte* payload, unsigned int length);
+bool publishMQTT2HistoryEntry(JsonObject entry);
 void publishMQTT2OrderComplete();
 void processMQTT2SyncQueue();
 void setupTime();

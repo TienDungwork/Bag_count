@@ -463,6 +463,15 @@ void updateCount(int bagCount) {
         newEntry["conveyor"] = conveyorName;
         newEntry["sensorTimeMs"] = lastMeasuredTime;
         newEntry["IsSyncServer"] = false;
+
+        if (publishMQTT2HistoryEntry(newEntry)) {
+          newEntry["IsSyncServer"] = true;
+          newEntry["syncServerAt"] = getTimeStr();
+          Serial.println("History entry pushed to MQTT2 immediately on completion");
+        } else {
+          Serial.println("History entry not pushed immediately; queued for MQTT2 retry");
+        }
+
         trimHistoryArrayToLimit(histArr);
 
         // Save back to file
