@@ -22,6 +22,8 @@ let countingState = {
   totalCounted: 0
 };
 let lastQrMismatchSignature = '';
+const MAX_STORED_ORDERS = 100;
+const MAX_STORED_HISTORY_ENTRIES = 100;
 
 // Simple ID counters instead of timestamps
 let batchIdCounter = 1;
@@ -340,6 +342,7 @@ async function loadOrdersFromESP32() {
           ...batch,
           orders: Array.isArray(batch.orders) ? batch.orders.map(normalizeOrderIdentity) : []
         }));
+        trimOrderBatchesToLimit();
         localStorage.setItem('orderBatches', JSON.stringify(orderBatches));
         console.log('Orders loaded from ESP32:', esp32Orders.length, 'batches');
         console.log('First batch sample:', esp32Orders[0]);
@@ -423,7 +426,7 @@ async function loadHistoryFromESP32() {
           historyMap.set(key, merged);
         });
 
-        const uniqueHistory = Array.from(historyMap.values());
+        const uniqueHistory = Array.from(historyMap.values()).slice(-MAX_STORED_HISTORY_ENTRIES);
         
         console.log('✅ Final Unique History:', uniqueHistory.length, 'records');
         console.log('✅ Final History Data:', uniqueHistory);
@@ -4084,6 +4087,10 @@ function loadHistory() {
   if (saved) {
     try {
       countingHistory = JSON.parse(saved);
+      if (countingHistory.length > MAX_STORED_HISTORY_ENTRIES) {
+        countingHistory = countingHistory.slice(-MAX_STORED_HISTORY_ENTRIES);
+        localStorage.setItem('countingHistory', JSON.stringify(countingHistory));
+      }
       console.log('Parsed history:', countingHistory.length, 'entries');
       console.log('History data:', countingHistory);
     } catch (error) {
@@ -4098,10 +4105,10 @@ function loadHistory() {
 }
 
 function saveHistory() {
-  // Giới hạn tối đa 50 entries (FIFO)
-  if (countingHistory.length > 50) {
-    countingHistory = countingHistory.slice(-50); // Giữ 50 entries mới nhất
-    console.log('History trimmed to 50 entries (FIFO)');
+  // Giới hạn tối đa 100 entries (FIFO)
+  if (countingHistory.length > MAX_STORED_HISTORY_ENTRIES) {
+    countingHistory = countingHistory.slice(-MAX_STORED_HISTORY_ENTRIES); // Giữ 100 entries mới nhất
+    console.log('History trimmed to 100 entries (FIFO)');
   }
   
   localStorage.setItem('countingHistory', JSON.stringify(countingHistory));
@@ -4111,11 +4118,11 @@ function saveHistory() {
   sendHistoryToESP32();
 }
 
-// Gửi lịch sử đến ESP32 (tối đa 50 entries) - CHỈ QUA API
+// Gửi lịch sử đến ESP32 (tối đa 100 entries) - CHỈ QUA API
 async function sendHistoryToESP32() {
   try {
-    // Chỉ gửi 50 entries mới nhất
-    const historyToSend = countingHistory.slice(-50);
+    // Chỉ gửi 100 entries mới nhất
+    const historyToSend = countingHistory.slice(-MAX_STORED_HISTORY_ENTRIES);
     
     console.log('Sending', historyToSend.length, 'history entries to ESP32...');
     
@@ -4359,6 +4366,41 @@ function clearHistory() {
   }
 }
 
+function countOrdersInBatches(batches = orderBatches) {
+  if (!Array.isArray(batches)) return 0;
+
+  return batches.reduce((total, batch) => {
+    return total + (Array.isArray(batch.orders) ? batch.orders.length : 0);
+  }, 0);
+}
+
+function trimOrderBatchesToLimit() {
+  let totalOrders = countOrdersInBatches(orderBatches);
+  if (totalOrders <= MAX_STORED_ORDERS) {
+    orderBatches = orderBatches.filter(batch => Array.isArray(batch.orders) && batch.orders.length > 0);
+    return;
+  }
+
+  console.log(`Trimming orderBatches from ${totalOrders} to ${MAX_STORED_ORDERS} newest orders`);
+
+  while (totalOrders > MAX_STORED_ORDERS && orderBatches.length > 0) {
+    const firstBatch = orderBatches[0];
+    if (!firstBatch || !Array.isArray(firstBatch.orders) || firstBatch.orders.length === 0) {
+      orderBatches.shift();
+      continue;
+    }
+
+    firstBatch.orders.shift();
+    totalOrders--;
+
+    if (firstBatch.orders.length === 0) {
+      orderBatches.shift();
+    }
+  }
+
+  orderBatches = orderBatches.filter(batch => Array.isArray(batch.orders) && batch.orders.length > 0);
+}
+
 // Data Persistence (Updated)
 function loadOrderBatches() {
   console.log('Loading order batches from localStorage...');
@@ -4372,6 +4414,7 @@ function loadOrderBatches() {
         ...batch,
         orders: Array.isArray(batch.orders) ? batch.orders : []
       }));
+      trimOrderBatchesToLimit();
       console.log('Loaded', orderBatches.length, 'batches from localStorage');
       
       // Update counters to avoid ID conflicts
@@ -4460,6 +4503,7 @@ function loadOrderBatches() {
 
 function saveOrderBatches() {
   try {
+    trimOrderBatchesToLimit();
     // Lưu vào localStorage
     localStorage.setItem('orderBatches', JSON.stringify(orderBatches));
     // console.log('Saved', orderBatches.length, 'batches to localStorage');
@@ -4474,6 +4518,7 @@ function saveOrderBatches() {
 // Gửi tất cả order batches đến ESP32
 async function sendOrderBatchesToESP32() {
   try {
+    trimOrderBatchesToLimit();
     console.log('Sending all order batches to ESP32...', orderBatches.length, 'batches');
     
     // Validate orderBatches trước khi gửi

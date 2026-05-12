@@ -546,6 +546,93 @@ void loadProductsFromFile() {
 static const char* ORDERS_FILE = "/orders.json";
 static const char* ORDERS_TMP_FILE = "/orders.tmp";
 static const char* ORDERS_BAK_FILE = "/orders.bak";
+static const size_t MAX_STORED_ORDERS = 100;
+static const size_t MAX_STORED_HISTORY_ENTRIES = 100;
+
+void trimHistoryArrayToLimit(JsonArray historyArray) {
+  while (historyArray.size() > MAX_STORED_HISTORY_ENTRIES) {
+    historyArray.remove(0);
+  }
+}
+
+static size_t countStoredOrders() {
+  size_t total = 0;
+
+  for (JsonVariant item : ordersData.as<JsonArray>()) {
+    if (item.is<JsonObject>() &&
+        item.as<JsonObject>().containsKey("orders") &&
+        item.as<JsonObject>()["orders"].is<JsonArray>()) {
+      total += item.as<JsonObject>()["orders"].as<JsonArray>().size();
+    } else {
+      total++;
+    }
+  }
+
+  return total;
+}
+
+static void removeEmptyOrderBatches() {
+  JsonArray batches = ordersData.as<JsonArray>();
+
+  for (int i = (int)batches.size() - 1; i >= 0; i--) {
+    JsonVariant item = batches[i];
+    if (!item.is<JsonObject>() ||
+        !item.as<JsonObject>().containsKey("orders") ||
+        !item.as<JsonObject>()["orders"].is<JsonArray>()) {
+      continue;
+    }
+
+    JsonArray orders = item.as<JsonObject>()["orders"].as<JsonArray>();
+    if (orders.size() == 0) {
+      String batchName = item.as<JsonObject>()["name"] | "";
+      Serial.println("Removing empty order batch: " + batchName);
+      batches.remove(i);
+    }
+  }
+}
+
+static void trimStoredOrdersToLimit() {
+  size_t totalOrders = countStoredOrders();
+  if (totalOrders <= MAX_STORED_ORDERS) {
+    removeEmptyOrderBatches();
+    return;
+  }
+
+  Serial.println("Orders exceed limit: " + String(totalOrders) +
+                 ". Trimming to " + String(MAX_STORED_ORDERS) + " newest orders.");
+
+  JsonArray batches = ordersData.as<JsonArray>();
+  while (totalOrders > MAX_STORED_ORDERS && batches.size() > 0) {
+    JsonVariant firstItem = batches[0];
+
+    if (firstItem.is<JsonObject>() &&
+        firstItem.as<JsonObject>().containsKey("orders") &&
+        firstItem.as<JsonObject>()["orders"].is<JsonArray>()) {
+      JsonArray orders = firstItem.as<JsonObject>()["orders"].as<JsonArray>();
+
+      if (orders.size() == 0) {
+        batches.remove(0);
+        continue;
+      }
+
+      JsonObject oldestOrder = orders[0];
+      String orderCode = oldestOrder["orderCode"] | "";
+      String productName = oldestOrder["productName"] | "";
+      Serial.println("Removing old order due to 100-order limit: " + orderCode + " - " + productName);
+      orders.remove(0);
+      totalOrders--;
+
+      if (orders.size() == 0) {
+        batches.remove(0);
+      }
+    } else {
+      batches.remove(0);
+      totalOrders--;
+    }
+  }
+
+  removeEmptyOrderBatches();
+}
 
 static bool verifyJsonArrayFile(const char* path) {
   File file = LittleFS.open(path, "r");
@@ -654,6 +741,8 @@ void saveOrdersToFile() {
   if (hasRemovedOrders) {
     Serial.println("Completed orders auto-removed before saving.");
   }
+
+  trimStoredOrdersToLimit();
   
   if (LittleFS.exists(ORDERS_TMP_FILE)) {
     LittleFS.remove(ORDERS_TMP_FILE);

@@ -239,7 +239,7 @@ void processMQTT2SyncQueue() {
   String content = file.readString();
   file.close();
 
-  DynamicJsonDocument doc(16384);
+  DynamicJsonDocument doc(32768);
   DeserializationError err = deserializeJson(doc, content);
   if (err || !doc.is<JsonArray>()) {
     Serial.println("MQTT2 sync: invalid /history.json, cannot parse queue");
@@ -262,6 +262,7 @@ void processMQTT2SyncQueue() {
 
     entry["IsSyncServer"] = true;
     entry["syncServerAt"] = getTimeStr();
+    trimHistoryArrayToLimit(historyArray);
 
     File out = LittleFS.open("/history.json", "w");
     if (!out) {

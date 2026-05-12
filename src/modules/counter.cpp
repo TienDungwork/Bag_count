@@ -407,7 +407,7 @@ void updateCount(int bagCount) {
       // Persist the new history entry to LittleFS (/history.json) immediately
       // so the ESP32 keeps a local record even if the web UI doesn't push history.
       {
-        DynamicJsonDocument histDoc(16384);
+        DynamicJsonDocument histDoc(32768);
         JsonArray histArr;
 
         // Load existing history.json if present
@@ -463,6 +463,7 @@ void updateCount(int bagCount) {
         newEntry["conveyor"] = conveyorName;
         newEntry["sensorTimeMs"] = lastMeasuredTime;
         newEntry["IsSyncServer"] = false;
+        trimHistoryArrayToLimit(histArr);
 
         // Save back to file
         File wf = LittleFS.open("/history.json", "w");

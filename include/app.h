@@ -510,6 +510,7 @@ void saveProductsToFile();
 void loadProductsFromFile();
 void saveOrdersToFile();
 void loadOrdersFromFile();
+void trimHistoryArrayToLimit(JsonArray historyArray);
 void addNewProduct(String code, String name);
 void deleteProduct(int productId);
 void addNewOrder(String productCode, String customerName, int quantity, String notes);

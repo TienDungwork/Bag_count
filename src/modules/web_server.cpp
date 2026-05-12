@@ -495,7 +495,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     Serial.println("History API: content preview = " + content.substring(0, min(200, (int)content.length())));
 
     // Try to parse and normalize older formats into the expected rich format
-    DynamicJsonDocument doc(16384);
+    DynamicJsonDocument doc(32768);
     DeserializationError err = deserializeJson(doc, content);
     if (err) {
       // If parse fails, return raw content (best-effort)
@@ -504,11 +504,12 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       return;
     }
 
-    DynamicJsonDocument outDoc(16384);
+    DynamicJsonDocument outDoc(32768);
     JsonArray out = outDoc.to<JsonArray>();
 
     if (doc.is<JsonArray>()) {
       JsonArray arr = doc.as<JsonArray>();
+      trimHistoryArrayToLimit(arr);
       Serial.println("History API: found " + String(arr.size()) + " entries in array");
       for (JsonVariant v : arr) {
         JsonObject obj = out.createNestedObject();
@@ -3028,10 +3029,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       }
 
       String normalizedData = jsonData;
-      DynamicJsonDocument incomingDoc(16384);
+      DynamicJsonDocument incomingDoc(32768);
       DeserializationError incomingErr = deserializeJson(incomingDoc, jsonData);
       if (!incomingErr && incomingDoc.is<JsonArray>()) {
-        DynamicJsonDocument existingDoc(16384);
+        DynamicJsonDocument existingDoc(32768);
         JsonArray existingArray;
 
         if (LittleFS.exists("/history.json")) {
@@ -3102,6 +3103,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           }
         }
 
+        trimHistoryArrayToLimit(incomingArray);
         normalizedData = "";
         serializeJson(incomingDoc, normalizedData);
       } else {
