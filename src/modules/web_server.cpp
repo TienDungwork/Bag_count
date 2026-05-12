@@ -1835,6 +1835,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
       }
       
       // MQTT2 settings (Server anh Dũng)
+      // Nếu client gửi kèm bất kỳ trường MQTT2 nào (vd. nút Test / Lưu cài đặt), luôn thử
+      // setupMQTT2() dù giá trị không đổi — để "Chưa kết nối" + bấm lại vẫn reconnect được.
+      bool mqtt2FieldsInRequest = doc.containsKey("mqtt2Server") || doc.containsKey("mqtt2Port") ||
+                                  doc.containsKey("mqtt2Username") || doc.containsKey("mqtt2Password");
       bool mqtt2NeedReconnect = false;
       if (doc.containsKey("mqtt2Server")) {
         String oldValue = mqtt_server2;
@@ -1871,6 +1875,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           Serial.println("  mqtt2Password: [CHANGED]");
         }
       }
+      const bool mqtt2ShouldRunSetup = mqtt2FieldsInRequest || mqtt2NeedReconnect;
       
       // Weight-based Detection Delay settings
       if (doc.containsKey("enableWeightBasedDelay")) {
@@ -1958,20 +1963,19 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("  - Ethernet IP: " + ethIP);
       }
       
-      // Reconnect MQTT2 if needed - CHỈ KHI CÓ INTERNET
-      if (mqtt2NeedReconnect && currentNetworkMode != WIFI_AP_MODE) {
-        Serial.println("MQTT2 configuration changed, reconnecting...");
-        Serial.println("  New MQTT2 broker: " + mqtt_server2 + ":" + String(mqtt_port2));
+      // Reconnect MQTT2 khi cấu hình đổi HOẶC client gửi kèm trường MQTT2 (thử lại kết nối)
+      if (mqtt2ShouldRunSetup && currentNetworkMode != WIFI_AP_MODE) {
+        Serial.println("MQTT2 reconnect/setup requested, running setupMQTT2()...");
+        Serial.println("  MQTT2 broker: " + mqtt_server2 + ":" + String(mqtt_port2));
         Serial.println("  Username: " + mqtt2_username);
-        Serial.println("  KeyLogin: [SET]");
+        Serial.println("  KeyLogin: " + String(mqtt2_password.length() > 0 ? "[SET]" : "[EMPTY]"));
         
         if (mqtt2.connected()) {
           mqtt2.disconnect();
         }
-        // Will reconnect via setupMQTT2() in main loop
         setupMQTT2();
-      } else if (mqtt2NeedReconnect && currentNetworkMode == WIFI_AP_MODE) {
-        Serial.println("MQTT2 (AP mode)");
+      } else if (mqtt2ShouldRunSetup && currentNetworkMode == WIFI_AP_MODE) {
+        Serial.println("MQTT2 reconnect skipped (AP mode)");
       }
       
       // Trả về response với thông báo restart nếu cần
