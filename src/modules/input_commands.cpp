@@ -190,6 +190,10 @@ void loadCurrentOrderForDisplay() {
           customerName = order["customerName"].as<String>();
           Serial.println("Updated global customerName: " + customerName);
         }
+        if (order.containsKey("vehicleNumber")) {
+          vehicleNumber = order["vehicleNumber"].as<String>();
+          Serial.println("Updated global vehicleNumber: " + vehicleNumber);
+        }
         
         targetCount = quantity;
         totalCount = restoredCount;

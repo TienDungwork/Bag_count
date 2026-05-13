@@ -1222,6 +1222,7 @@ async function handleCountUpdate(data) {
       if (newCurrentCount >= (foundOrder.currentCount || 0)) {
         const oldCount = foundOrder.currentCount || 0;
         foundOrder.currentCount = newCurrentCount;
+        foundOrder.executeCount = newCurrentCount;
         
         // Cập nhật activeBatch nếu cần
         if (!foundBatch.isActive) {
@@ -1706,6 +1707,7 @@ function sendCurrentOrderWS(orderData) {
     productCode: orderData.productCode || '',
     orderCode: orderData.orderCode || '',
     customerName: orderData.customerName || '',
+    vehicleNumber: orderData.vehicleNumber || '',
     target: orderData.quantity || 0,
     warn: orderData.warningQuantity || 5,
     keepCount: !!orderData.keepCount,
@@ -2877,6 +2879,8 @@ async function sendSelectedOrdersToESP32(batch) {
     id: order.id,
     orderNumber: order.orderNumber || 0,
     orderCode: order.orderCode || '',
+    customerName: order.customerName || '',
+    vehicleNumber: order.vehicleNumber || '',
     productName: order.product?.name || order.productName || '',
     productCode: order.product?.code || order.productCode || '',
     quantity: order.quantity || 0,
@@ -2908,6 +2912,7 @@ async function sendSelectedOrdersToESP32(batch) {
           orderNumber: firstSelectedOrder.orderNumber || 0,
           orderCode: firstSelectedOrder.orderCode || '',
           customerName: firstSelectedOrder.customerName || '',
+          vehicleNumber: firstSelectedOrder.vehicleNumber || '',
           productName: firstSelectedOrder.product?.name || firstSelectedOrder.productName || '',
           productCode: firstSelectedOrder.product?.code || firstSelectedOrder.productCode || '',
           unitWeight: Number(firstSelectedOrder.product?.unitWeight || firstSelectedOrder.unitWeight || 0),
@@ -2916,6 +2921,8 @@ async function sendSelectedOrdersToESP32(batch) {
         activeCountingOrder: activeCountingOrder ? {
           id: activeCountingOrder.id,
           orderCode: activeCountingOrder.orderCode || '',
+          customerName: activeCountingOrder.customerName || '',
+          vehicleNumber: activeCountingOrder.vehicleNumber || '',
           productName: activeCountingOrder.product?.name || activeCountingOrder.productName || '',
           productCode: activeCountingOrder.product?.code || activeCountingOrder.productCode || '',
           currentCount: Number(activeCountingOrder.currentCount || 0)
@@ -3134,7 +3141,7 @@ async function startCounting() {
   const resumeCount = getOrderSavedCount(currentOrder);
   const product = currentOrder.product || currentProducts.find(p => p.name === currentOrder.productName);
   const productName = product?.name || currentOrder.productName;
-  const productCode = product?.code || '';
+  const productCode = product?.code || currentOrder.productCode || '';
   const unitWeight = Number(product?.unitWeight || currentOrder.product?.unitWeight || currentOrder.unitWeight || 0);
   const productDisplay = productCode ? `${productCode} - ${productName}` : productName;
 
@@ -3155,6 +3162,7 @@ async function startCounting() {
       productCode: productCode,
       productDisplay: productDisplay,
       orderCode: currentOrder.orderCode,
+      vehicleNumber: currentOrder.vehicleNumber,
       quantity: currentOrder.quantity
     }
   };
@@ -3179,6 +3187,7 @@ async function startCounting() {
     await sendESP32Command('set_current_order', {
       orderCode: currentOrder.orderCode,
       customerName: currentOrder.customerName,
+      vehicleNumber: currentOrder.vehicleNumber,
       productName: productName,
       productCode: productCode,
       type: productCode || productName,
@@ -3197,6 +3206,7 @@ async function startCounting() {
         productCode,
         orderCode: currentOrder.orderCode,
         customerName: currentOrder.customerName,
+        vehicleNumber: currentOrder.vehicleNumber,
         quantity: currentOrder.quantity,
         warningQuantity: currentOrder.warningQuantity || 5,
         keepCount: isResumeFromPaused,
@@ -4995,7 +5005,7 @@ async function sendOrderToESP32(order) {
       orderCode: order.orderCode,
       vehicleNumber: order.vehicleNumber,
       productName: order.product?.name || order.productName,
-      productCode: order.product?.code || '',
+      productCode: order.product?.code || order.productCode || '',
       quantity: order.quantity,
       warningQuantity: order.warningQuantity
     };
@@ -5300,8 +5310,9 @@ async function updateStatusFromDevice(data) {
           return;
         }
         
-        // ESP32 gửi total count tích lũy cho toàn bộ batch
-        const totalCountFromDevice = data.count;
+        // ESP32 gửi count riêng cho đơn hiện tại. Tổng batch phải tính từ
+        // executeCount/currentCount từng đơn để tránh lấy số đơn trước làm tổng mới.
+        const currentCountFromDevice = Number(data.count || 0);
         
         // Debug: Log thông tin đơn hàng hiện tại
         // console.log(` DEBUG - Đơn ${currentOrderIndex + 1}:`, {
@@ -5311,25 +5322,13 @@ async function updateStatusFromDevice(data) {
         //   status: currentOrder.status
         // });
         
-        // Tính số đếm đã hoàn thành từ các đơn hàng trước đó (THEO THỨ TỰ)
-        let completedCount = 0;
-        for (let i = 0; i < currentOrderIndex; i++) {
-          // Đối với đơn đã completed, cộng đúng số quantity
-          if (selectedOrders[i].status === 'completed') {
-            completedCount += selectedOrders[i].quantity;
-            // console.log(` DEBUG - Đơn ${i + 1} đã hoàn thành: ${selectedOrders[i].quantity} bao`);
-          }
-        }
-        
-        // Số đếm hiện tại của đơn hàng = total từ ESP32 - đã hoàn thành trước đó
-        const calculatedCurrentCount = Math.max(0, totalCountFromDevice - completedCount);
-        
         // ĐẢM BẢO không vượt quá target của đơn hiện tại
-        const newCurrentCount = Math.min(calculatedCurrentCount, currentOrder.quantity);
+        const newCurrentCount = Math.min(currentCountFromDevice, currentOrder.quantity);
         
         // CHỈ cập nhật nếu số mới lớn hơn (tránh ghi đè sai)
         if (newCurrentCount >= (currentOrder.currentCount || 0)) {
           currentOrder.currentCount = newCurrentCount;
+          currentOrder.executeCount = newCurrentCount;
         }
         
         // console.log(` DEBUG - Tính toán chi tiết:`, {
@@ -5343,11 +5342,13 @@ async function updateStatusFromDevice(data) {
         //   willUpdate: newCurrentCount >= (currentOrder.currentCount || 0)
         // });
         
-        // Cập nhật tổng đếm
-        countingState.totalCounted = totalCountFromDevice;
+        const batchTotalCount = selectedOrders.reduce((sum, order) => {
+          return sum + Number(order.executeCount || order.currentCount || 0);
+        }, 0);
+        countingState.totalCounted = batchTotalCount;
         
-        // Update executeCount với tổng count từ ESP32
-        updateExecuteCountDisplay(totalCountFromDevice, 'updateStatusFromDevice-polling');
+        // Update executeCount với tổng count của batch
+        updateExecuteCountDisplay(batchTotalCount, 'updateStatusFromDevice-polling');
         
         // console.log(`Đơn ${currentOrderIndex + 1}/${selectedOrders.length}: ${currentOrder.customerName}`);
         // console.log(`ESP32 total: ${totalCountFromDevice} | Đã xong: ${completedCount} | Đơn hiện tại: ${currentOrder.currentCount}/${currentOrder.quantity}`);
@@ -8073,7 +8074,7 @@ async function sendOrderUpdateToESP32(order, batchIndex) {
       batchId: batch.id,
       orderId: order.id,
       orderData: {
-        productCode: order.product?.code || '',
+        productCode: order.product?.code || order.productCode || '',
         productName: order.product?.name || order.productName,
         quantity: order.quantity,
         bagType: order.bagType || ''

@@ -516,10 +516,9 @@ void updateCount(int bagCount) {
       if (autoReset && totalCount >= targetCount && targetCount > 0 && totalCount > 0) {
         Serial.println("Auto Reset enabled - resetting CURRENT ORDER only");
         
-        // HIỂN THỊ SỐ ĐẾM CUỐI TRONG 3 GIÂY TRƯỚC KHI RESET
-        Serial.println("Displaying final count " + String(totalCount) + " for 3 seconds before reset...");
+        // HIỂN THỊ SỐ ĐẾM CUỐI TRƯỚC KHI RESET
+        Serial.println("Displaying final count " + String(totalCount) + " before switching order...");
         updateDisplay(); // Đảm bảo LED hiển thị số cuối
-        delay(3000); // Hiển thị số đếm cuối trong 3 giây
         
         //  CHỈ RESET ĐƠN HÀNG HIỆN TẠI, GIỮ NGUYÊN DANH SÁCH
         String completedOrderType = bagType;  // Lưu tên đơn vừa hoàn thành
@@ -650,6 +649,9 @@ void updateCount(int bagCount) {
               Serial.println("Found SELECTED next order: " + String(nextOrderNumber) + " - " + productName);
               
               String newProductCode = orderProductCodeFromJson(nextOrder);
+              String newOrderCode = nextOrder["orderCode"].as<String>();
+              String newCustomerName = nextOrder["customerName"].as<String>();
+              String newVehicleNumber = nextOrder["vehicleNumber"].as<String>();
               int quantity = nextOrder["quantity"] | 1;
               int warningQuantity = nextOrder["warningQuantity"].as<int>() | 5; // Mặc định 5 nếu không có
               String nextStatus = nextOrder["status"].as<String>();
@@ -696,6 +698,9 @@ void updateCount(int bagCount) {
               // CẬP NHẬT BIẾN HIỂN THỊ
               bagType = productName;
               productCode = newProductCode;
+              orderCode = newOrderCode;
+              customerName = newCustomerName;
+              vehicleNumber = newVehicleNumber;
               targetCount = quantity;
               totalCount = resumeCount;  // Resume đơn paused, chỉ về 0 khi là đơn mới
               isLimitReached = false;
@@ -758,11 +763,12 @@ void updateCount(int bagCount) {
           waitingForInterval = false;
           bagStartTime = 0;
           lastDebounceTime = 0;
-          waitForSensorClearOnStart = true;
+          waitForSensorClearOnStart = false;
           Serial.println("Sensor state cleared");
           
           // Đã tìm thấy đơn tiếp theo - gửi thông tin lên web
           loadCurrentOrderForDisplay();
+          lastCountPublish = 0;
           publishCountUpdate();
           publishStatusMQTT();
           publishBagConfigs();

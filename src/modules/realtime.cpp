@@ -54,6 +54,7 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
       String selectedOrderCode = doc["orderCode"].as<String>();
       String selectedProductCode = doc["productCode"].as<String>();
       String selectedCustomerName = doc["customerName"].as<String>();
+      String selectedVehicleNumber = doc["vehicleNumber"].as<String>();
       int target = doc["target"] | 20;
       int warn = doc["warn"] | 10;
       bool keepCount = doc["keepCount"] | false;
@@ -69,6 +70,9 @@ void handleRealtimeMessage(const String& topicStr, const String& message) {
         }
         if (selectedCustomerName.length() > 0) {
           customerName = selectedCustomerName;
+        }
+        if (selectedVehicleNumber.length() > 0) {
+          vehicleNumber = selectedVehicleNumber;
         }
         targetCount = target;
         

@@ -603,7 +603,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
   // API điều khiển cơ bản
   server.on("/api/cmd", HTTP_POST, [](){
     if (server.hasArg("plain")) {
-      DynamicJsonDocument doc(256);
+      DynamicJsonDocument doc(1024);
       deserializeJson(doc, server.arg("plain"));
       String cmd = doc["cmd"];
       
@@ -656,6 +656,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         String productName = doc["productName"].as<String>();
         String customerNameFromWeb = doc["customerName"].as<String>();
         String orderCodeFromWeb = doc["orderCode"].as<String>();
+        String vehicleNumberFromWeb = doc["vehicleNumber"].as<String>();
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
@@ -668,6 +669,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Product: " + productName);
         Serial.println("Product Code: " + productCodeFromWeb);
         Serial.println("Customer: " + customerNameFromWeb);
+        Serial.println("Vehicle: " + vehicleNumberFromWeb);
         Serial.println("Order Code: " + orderCodeFromWeb);
         Serial.println("Target: " + String(target));
         Serial.println("Warning: " + String(warningQuantity));
@@ -681,8 +683,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         productCode = productCodeFromWeb;  // Cập nhật mã sản phẩm
         orderCode = orderCodeFromWeb;      // Cập nhật biến global
         customerName = customerNameFromWeb; // Cập nhật biến global
+        vehicleNumber = vehicleNumberFromWeb;
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
+        Serial.println("Updated global vehicleNumber: " + vehicleNumber);
         targetCount = target; 
         if (unitWeight <= 0.0f) {
           unitWeight = resolveUnitWeightFromData(orderCodeFromWeb, productCodeFromWeb, productName);
@@ -814,6 +818,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         String productName = doc["productName"].as<String>();
         String customerNameFromWeb = doc["customerName"].as<String>();
         String orderCodeFromWeb = doc["orderCode"].as<String>();
+        String vehicleNumberFromWeb = doc["vehicleNumber"].as<String>();
         String productCodeFromWeb = doc["productCode"].as<String>();  // Nhận mã sản phẩm từ web
         int target = doc["target"] | 20;
         int warningQuantity = doc["warningQuantity"] | 5;
@@ -824,6 +829,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         Serial.println("Product: " + productName);
         Serial.println("Product Code: " + productCodeFromWeb);
         Serial.println("Customer: " + customerNameFromWeb);
+        Serial.println("Vehicle: " + vehicleNumberFromWeb);
         Serial.println("Order Code: " + orderCodeFromWeb);
         Serial.println("Target: " + String(target));
         Serial.println("UnitWeight: " + String(unitWeight, 3));
@@ -834,8 +840,10 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         productCode = productCodeFromWeb;  // Cập nhật mã sản phẩm
         orderCode = orderCodeFromWeb;      // Cập nhật biến global
         customerName = customerNameFromWeb; // Cập nhật biến global
+        vehicleNumber = vehicleNumberFromWeb;
         Serial.println("Updated global orderCode: " + orderCode);
         Serial.println("Updated global customerName: " + customerName);
+        Serial.println("Updated global vehicleNumber: " + vehicleNumber);
         targetCount = target;
         if (unitWeight <= 0.0f) {
           unitWeight = resolveUnitWeightFromData(orderCodeFromWeb, productCodeFromWeb, productName);
@@ -2925,6 +2933,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
               String detailStatus = detail["status"].as<String>();
               int detailCurrentCount = detail["currentCount"] | 0;
               String detailProductCode = detail["productCode"].as<String>();
+              String detailCustomerName = detail["customerName"].as<String>();
+              String detailVehicleNumber = detail["vehicleNumber"].as<String>();
 
               for (size_t j = 0; j < orders.size(); j++) {
                 JsonObject order = orders[j];
@@ -2945,6 +2955,12 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
                   if (detailProductCode.length() > 0) {
                     order["productCode"] = detailProductCode;
                   }
+                  if (detailCustomerName.length() > 0) {
+                    order["customerName"] = detailCustomerName;
+                  }
+                  if (detailVehicleNumber.length() > 0) {
+                    order["vehicleNumber"] = detailVehicleNumber;
+                  }
                   break;
                 }
               }
@@ -2954,6 +2970,8 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           // Nếu web đã chỉ ra đơn đang counting, sync context active về ESP32
           if (!activeCountingOrder.isNull()) {
             String activeOrderCode = activeCountingOrder["orderCode"].as<String>();
+            String activeCustomerName = activeCountingOrder["customerName"].as<String>();
+            String activeVehicleNumber = activeCountingOrder["vehicleNumber"].as<String>();
             String activeProductName = activeCountingOrder["productName"].as<String>();
             String activeProductCode = activeCountingOrder["productCode"].as<String>();
             int activeCurrentCount = activeCountingOrder["currentCount"] | 0;
@@ -2966,6 +2984,12 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             }
             if (activeOrderCode.length() > 0) {
               orderCode = activeOrderCode;
+            }
+            if (activeCustomerName.length() > 0) {
+              customerName = activeCustomerName;
+            }
+            if (activeVehicleNumber.length() > 0) {
+              vehicleNumber = activeVehicleNumber;
             }
             totalCount = activeCurrentCount;
             isLimitReached = false;
@@ -2981,6 +3005,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
           String firstProductCode = firstSelectedOrder["productCode"].as<String>();
           String firstOrderCode = firstSelectedOrder["orderCode"].as<String>();
           String firstCustomerName = firstSelectedOrder["customerName"].as<String>();
+          String firstVehicleNumber = firstSelectedOrder["vehicleNumber"].as<String>();
           int firstQuantity = firstSelectedOrder["quantity"] | 0;
 
           if (firstProductName.length() > 0) {
@@ -2988,6 +3013,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
             productCode = firstProductCode;
             orderCode = firstOrderCode;
             customerName = firstCustomerName;
+            vehicleNumber = firstVehicleNumber;
             if (firstQuantity > 0) targetCount = firstQuantity;
 
             Serial.println("Synced first selected order from web:");
