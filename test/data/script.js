@@ -6221,11 +6221,12 @@ async function refreshMQTT2StatusFromESP32() {
   return { connected, state: newSettings._mqtt2State };
 }
 
-async function testMQTT2Connection() {
+async function connectMQTT2() {
   const mqtt2Server = document.getElementById('mqtt2Server').value;
   const mqtt2Port = document.getElementById('mqtt2Port').value;
   const mqtt2Username = document.getElementById('mqtt2Username').value;
   const mqtt2Password = document.getElementById('mqtt2Password').value;
+  const connectBtn = document.getElementById('mqtt2ConnectBtn');
   
   if (!mqtt2Password || mqtt2Password.trim() === '') {
     showNotification('Vui lòng nhập KeyLogin (Password)', 'error');
@@ -6233,45 +6234,65 @@ async function testMQTT2Connection() {
   }
   
   try {
-    showNotification('Đang test kết nối MQTT2...', 'info');
+    showNotification('Đang kết nối MQTT2...', 'info');
+    if (connectBtn) {
+      connectBtn.disabled = true;
+      connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang kết nối';
+    }
     
-    // Gửi test data đến ESP32
-    const testData = {
+    const connectData = {
       mqtt2Server: mqtt2Server,
       mqtt2Port: parseInt(mqtt2Port),
       mqtt2Username: mqtt2Username,
       mqtt2Password: mqtt2Password
     };
     
-    const response = await fetch('/api/settings', {
+    const response = await fetch('/api/mqtt2/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testData)
+      body: JSON.stringify(connectData)
     });
     
     if (response.ok) {
-      await response.json();
+      const result = await response.json();
+      settings.mqtt2Server = mqtt2Server;
+      settings.mqtt2Port = parseInt(mqtt2Port);
+      settings.mqtt2Username = mqtt2Username;
+      settings.mqtt2Password = mqtt2Password;
+      settings._mqtt2Connected = Boolean(result.connected);
+      settings._mqtt2State = result.state;
+      updateMQTT2Status(result.connected);
 
-      setTimeout(async () => {
-        try {
-          const mqtt2Status = await refreshMQTT2StatusFromESP32();
-          if (mqtt2Status.connected) {
-            showNotification('Test kết nối MQTT2 thành công!', 'success');
-          } else {
-            showNotification(`Đã lưu cấu hình, nhưng MQTT2 chưa kết nối (state=${mqtt2Status.state})`, 'error');
-          }
-        } catch (error) {
-          console.error('Error reloading MQTT2 status:', error);
-          showNotification('Không đọc được trạng thái MQTT2: ' + error.message, 'error');
-        }
-      }, 2000);
+      if (result.connected) {
+        showNotification('Kết nối MQTT2 thành công!', 'success');
+      } else {
+        showNotification(result.message || `MQTT2 chưa kết nối (state=${result.state})`, 'error');
+      }
     } else {
-      showNotification('Test kết nối MQTT2 thất bại', 'error');
+      let message = 'Kết nối MQTT2 thất bại';
+      try {
+        const result = await response.json();
+        if (result.message) message = result.message;
+        if (result.state !== undefined) message += ` (state=${result.state})`;
+        updateMQTT2Status(result.connected);
+      } catch (parseError) {
+        console.error('Error parsing MQTT2 connect error:', parseError);
+      }
+      showNotification(message, 'error');
     }
   } catch (error) {
-    console.error('Error testing MQTT2 connection:', error);
-    showNotification('Lỗi test kết nối: ' + error.message, 'error');
+    console.error('Error connecting MQTT2:', error);
+    showNotification('Lỗi kết nối MQTT2: ' + error.message, 'error');
+  } finally {
+    if (connectBtn) {
+      connectBtn.disabled = false;
+      connectBtn.innerHTML = '<i class="fas fa-plug"></i> Kết nối';
+    }
   }
+}
+
+async function testMQTT2Connection() {
+  return connectMQTT2();
 }
 
 // Get device information (MAC address and realtime endpoint)

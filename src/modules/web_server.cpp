@@ -1758,6 +1758,96 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     server.send(200, "application/json", out);
   });
 
+  server.on("/api/mqtt2/connect", HTTP_POST, [](){
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+
+    if (!server.hasArg("plain")) {
+      server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"No data provided\",\"connected\":false}");
+      return;
+    }
+
+    DynamicJsonDocument doc(512);
+    DeserializationError parseError = deserializeJson(doc, server.arg("plain"));
+    if (parseError) {
+      server.send(400, "application/json", "{\"status\":\"Error\",\"message\":\"Invalid JSON\",\"connected\":false}");
+      return;
+    }
+
+    String requestedServer = doc.containsKey("mqtt2Server") ? doc["mqtt2Server"].as<String>() : mqtt_server2;
+    int requestedPort = doc.containsKey("mqtt2Port") ? doc["mqtt2Port"].as<int>() : mqtt_port2;
+    String requestedUsername = doc.containsKey("mqtt2Username") ? doc["mqtt2Username"].as<String>() : mqtt2_username;
+    String requestedPassword = doc.containsKey("mqtt2Password") ? doc["mqtt2Password"].as<String>() : mqtt2_password;
+
+    requestedServer.trim();
+    requestedUsername.trim();
+    requestedPassword.trim();
+
+    DynamicJsonDocument response(256);
+    response["status"] = "Error";
+    response["connected"] = false;
+
+    if (requestedServer.length() == 0 || requestedPort <= 0 || requestedPort > 65535) {
+      response["message"] = "MQTT2 server/port invalid";
+      response["state"] = mqtt2.state();
+      String out;
+      serializeJson(response, out);
+      server.send(400, "application/json", out);
+      return;
+    }
+
+    if (requestedPassword.length() == 0) {
+      response["message"] = "KeyLogin is required";
+      response["state"] = mqtt2.state();
+      String out;
+      serializeJson(response, out);
+      server.send(400, "application/json", out);
+      return;
+    }
+
+    mqtt_server2 = requestedServer;
+    mqtt_port2 = requestedPort;
+    mqtt2_username = requestedUsername;
+    mqtt2_password = requestedPassword;
+    saveSettingsToFile();
+
+    if (currentNetworkMode == WIFI_AP_MODE) {
+      Serial.println("MQTT2 connect requested but skipped in AP mode");
+      response["message"] = "MQTT2 cannot connect in AP mode";
+      response["state"] = mqtt2.state();
+      String out;
+      serializeJson(response, out);
+      server.send(409, "application/json", out);
+      return;
+    }
+
+    Serial.println("MQTT2 manual connect requested from web");
+    Serial.println("  MQTT2 broker: " + mqtt_server2 + ":" + String(mqtt_port2));
+    Serial.println("  Username: " + mqtt2_username);
+    Serial.println("  KeyLogin: " + String(mqtt2_password.length() > 0 ? "[SET]" : "[EMPTY]"));
+
+    if (mqtt2.connected()) {
+      Serial.println("MQTT2 was connected, disconnecting before reconnect...");
+      mqtt2.disconnect();
+    } else {
+      mqtt2.disconnect();
+    }
+    ethClient2.stop();
+    delay(150);
+
+    setupMQTT2();
+    mqtt2.loop();
+
+    bool connected = mqtt2.connected();
+    response["status"] = connected ? "OK" : "Error";
+    response["message"] = connected ? "MQTT2 connected successfully" : "MQTT2 connection failed";
+    response["connected"] = connected;
+    response["state"] = mqtt2.state();
+
+    String out;
+    serializeJson(response, out);
+    server.send(connected ? 200 : 503, "application/json", out);
+  });
+
   server.on("/api/settings", HTTP_POST, [](){
     server.sendHeader("Access-Control-Allow-Origin", "*");
     
