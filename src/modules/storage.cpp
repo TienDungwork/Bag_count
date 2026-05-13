@@ -775,6 +775,194 @@ void saveOrdersToFile() {
   }
 }
 
+void clearCountStateFile() {
+  if (LittleFS.exists(COUNT_STATE_TMP_FILE)) {
+    LittleFS.remove(COUNT_STATE_TMP_FILE);
+  }
+  if (LittleFS.exists(COUNT_STATE_FILE)) {
+    LittleFS.remove(COUNT_STATE_FILE);
+    Serial.println("Count checkpoint cleared");
+  }
+}
+
+void saveCountStateToFile() {
+  if (totalCount <= 0 || targetCount <= 0 || bagType.length() == 0) {
+    return;
+  }
+
+  DynamicJsonDocument doc(1024);
+  doc["orderCode"] = orderCode;
+  doc["productName"] = bagType;
+  doc["productCode"] = productCode;
+  doc["customerName"] = customerName;
+  doc["vehicleNumber"] = vehicleNumber;
+  doc["currentCount"] = (long)totalCount;
+  doc["target"] = targetCount;
+  doc["warningQuantity"] = 5;
+  doc["status"] = isRunning ? "RUNNING" : "PAUSE";
+  doc["savedAtMs"] = millis();
+  doc["startTime"] = startTimeStr;
+  doc["startTimeIso"] = startTimeIsoStr;
+
+  for (auto& cfg : bagConfigs) {
+    if (cfg.type == bagType) {
+      doc["warningQuantity"] = cfg.warn;
+      break;
+    }
+  }
+
+  if (LittleFS.exists(COUNT_STATE_TMP_FILE)) {
+    LittleFS.remove(COUNT_STATE_TMP_FILE);
+  }
+
+  File file = LittleFS.open(COUNT_STATE_TMP_FILE, "w");
+  if (!file) {
+    Serial.println("Failed to open count checkpoint tmp for writing");
+    return;
+  }
+
+  size_t written = serializeJson(doc, file);
+  file.flush();
+  file.close();
+
+  DynamicJsonDocument verifyDoc(1024);
+  File verifyFile = LittleFS.open(COUNT_STATE_TMP_FILE, "r");
+  bool validObject = false;
+  if (verifyFile) {
+    DeserializationError err = deserializeJson(verifyDoc, verifyFile);
+    verifyFile.close();
+    validObject = !err && verifyDoc.is<JsonObject>();
+  }
+  if (written == 0 || !validObject) {
+    Serial.println("Count checkpoint tmp invalid; keeping previous checkpoint");
+    LittleFS.remove(COUNT_STATE_TMP_FILE);
+    return;
+  }
+
+  if (LittleFS.exists(COUNT_STATE_FILE)) {
+    LittleFS.remove(COUNT_STATE_FILE);
+  }
+  if (LittleFS.rename(COUNT_STATE_TMP_FILE, COUNT_STATE_FILE)) {
+    Serial.println("Count checkpoint saved: " + String(totalCount) + "/" + String(targetCount) +
+                   " orderCode=" + orderCode + " productCode=" + productCode);
+  } else {
+    Serial.println("Failed to promote count checkpoint tmp");
+    LittleFS.remove(COUNT_STATE_TMP_FILE);
+  }
+}
+
+bool restoreCountStateFromFile() {
+  if (!LittleFS.exists(COUNT_STATE_FILE)) {
+    Serial.println("No count checkpoint found");
+    return false;
+  }
+
+  File file = LittleFS.open(COUNT_STATE_FILE, "r");
+  if (!file) {
+    Serial.println("Count checkpoint exists but cannot be opened");
+    return false;
+  }
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err || !doc.is<JsonObject>()) {
+    Serial.println("Count checkpoint invalid; clearing");
+    clearCountStateFile();
+    return false;
+  }
+
+  int restoredCount = doc["currentCount"] | 0;
+  int restoredTarget = doc["target"] | 0;
+  if (restoredCount <= 0 || restoredTarget <= 0 || restoredCount >= restoredTarget) {
+    Serial.println("Count checkpoint is empty or already complete; clearing");
+    clearCountStateFile();
+    return false;
+  }
+
+  String restoredOrderCode = doc["orderCode"].as<String>();
+  String restoredProductCode = doc["productCode"].as<String>();
+  String restoredProductName = doc["productName"].as<String>();
+  bool matchedOrder = false;
+
+  for (size_t i = 0; i < ordersData.size(); i++) {
+    JsonArray orders = ordersData[i]["orders"];
+    for (size_t j = 0; j < orders.size(); j++) {
+      JsonObject order = orders[j];
+      String orderOrderCode = order["orderCode"].as<String>();
+      String orderProductCode = orderProductCodeFromJson(order);
+      String orderProductName = order["productName"].as<String>();
+      bool sameOrder = restoredOrderCode.length() > 0 && orderOrderCode == restoredOrderCode &&
+                       restoredProductCode.length() > 0 && orderProductCode == restoredProductCode;
+      if (!sameOrder && restoredOrderCode.length() > 0 && orderOrderCode == restoredOrderCode &&
+          restoredProductName.length() > 0 && orderProductName == restoredProductName) {
+        sameOrder = true;
+      }
+
+      if (sameOrder) {
+        order["selected"] = true;
+        order["status"] = "paused";
+        order["currentCount"] = restoredCount;
+        order["executeCount"] = restoredCount;
+        if (!order.containsKey("productCode") && restoredProductCode.length() > 0) {
+          order["productCode"] = restoredProductCode;
+        }
+        matchedOrder = true;
+      } else {
+        String status = order["status"].as<String>();
+        if (status == "counting") {
+          order["status"] = "waiting";
+        }
+      }
+    }
+  }
+
+  bagType = restoredProductName;
+  productCode = restoredProductCode;
+  orderCode = restoredOrderCode;
+  customerName = doc["customerName"].as<String>();
+  vehicleNumber = doc["vehicleNumber"].as<String>();
+  targetCount = restoredTarget;
+  totalCount = restoredCount;
+  startTimeStr = doc["startTime"].as<String>();
+  startTimeIsoStr = doc["startTimeIso"].as<String>();
+  isRunning = false;
+  isTriggerEnabled = false;
+  isCountingEnabled = false;
+  isStartAuthorized = false;
+  isLimitReached = false;
+  currentSystemStatus = "PAUSE";
+
+  int warningQuantity = doc["warningQuantity"] | 5;
+  bool foundConfig = false;
+  for (auto& cfg : bagConfigs) {
+    if (cfg.type == bagType) {
+      cfg.target = targetCount;
+      cfg.warn = warningQuantity;
+      cfg.status = "PAUSE";
+      foundConfig = true;
+    } else if (cfg.status == "RUNNING") {
+      cfg.status = "WAIT";
+    }
+  }
+  if (!foundConfig && bagType.length() > 0) {
+    BagConfig restoredCfg;
+    restoredCfg.type = bagType;
+    restoredCfg.target = targetCount;
+    restoredCfg.warn = warningQuantity;
+    restoredCfg.status = "PAUSE";
+    bagConfigs.push_back(restoredCfg);
+  }
+
+  if (matchedOrder) {
+    saveOrdersToFile();
+  }
+  saveBagConfigsToFile();
+  Serial.println("Count checkpoint restored: " + String(totalCount) + "/" + String(targetCount) +
+                 " orderCode=" + orderCode + " productCode=" + productCode);
+  return true;
+}
+
 void loadOrdersFromFile() {
   // Nếu mất điện sau khi ghi xong orders.tmp nhưng trước bước promote, tmp là bản mới nhất.
   if (LittleFS.exists(ORDERS_TMP_FILE)) {

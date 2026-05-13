@@ -3064,6 +3064,10 @@ async function startCounting() {
   // KIỂM TRA XEM ĐÃ CÓ ĐƠN HÀNG ĐANG ĐẾM HAY CHƯA
   let currentOrderIndex = selectedOrders.findIndex(o => o.status === 'counting');
   let isResumeFromPaused = false; // Flag để biết có phải resume từ paused không
+  if (currentOrderIndex !== -1 && getOrderSavedCount(selectedOrders[currentOrderIndex]) > 0) {
+    isResumeFromPaused = true;
+    console.log('Resuming interrupted counting order at index:', currentOrderIndex);
+  }
   
   if (currentOrderIndex === -1) {
     // CHƯA CÓ ĐƠN HÀNG NÀO ĐANG ĐẾM
@@ -3071,6 +3075,18 @@ async function startCounting() {
     if (currentOrderIndex !== -1) {
       isResumeFromPaused = true;
       console.log('Resuming from stopped order at index:', currentOrderIndex);
+    }
+
+    if (currentOrderIndex === -1) {
+      currentOrderIndex = selectedOrders.findIndex(o =>
+        o.selected &&
+        o.status !== 'completed' &&
+        getOrderSavedCount(o) > 0
+      );
+      if (currentOrderIndex !== -1) {
+        isResumeFromPaused = true;
+        console.log('Resuming saved progress order at index:', currentOrderIndex);
+      }
     }
 
     if (currentOrderIndex === -1) {
@@ -3139,6 +3155,12 @@ async function startCounting() {
   // Get product info for current order
   const currentOrder = selectedOrders[currentOrderIndex];
   const resumeCount = getOrderSavedCount(currentOrder);
+  if (resumeCount > 0) {
+    isResumeFromPaused = true;
+    currentOrder.currentCount = resumeCount;
+    currentOrder.executeCount = resumeCount;
+    currentOrder.status = 'counting';
+  }
   const product = currentOrder.product || currentProducts.find(p => p.name === currentOrder.productName);
   const productName = product?.name || currentOrder.productName;
   const productCode = product?.code || currentOrder.productCode || '';
@@ -3617,22 +3639,45 @@ function updateProductGroupTable() {
   productGroups.forEach((group, index) => {
     const groupName = getProductGroupName(group);
     const row = document.createElement('tr');
-    const groupArg = JSON.stringify(groupName);
-    row.innerHTML = `
-      <td>${index + 1}</td>
-      <td>${groupName}</td>
-      <td>${countProductsInGroup(groupName)}</td>
-      <td class="actions-cell">
-        <div class="table-action-buttons">
-        <button class="edit-btn" onclick="editProductGroup(${groupArg})" title="Sửa nhóm" aria-label="Sửa nhóm">
-          <i class="fas fa-edit"></i>
-        </button>
-        <button class="delete-btn" onclick="deleteProductGroup(${groupArg})" title="Xóa nhóm" aria-label="Xóa nhóm">
-          <i class="fas fa-trash"></i>
-        </button>
-        </div>
-      </td>
-    `;
+
+    const indexCell = document.createElement('td');
+    indexCell.textContent = String(index + 1);
+
+    const nameCell = document.createElement('td');
+    nameCell.textContent = groupName;
+
+    const countCell = document.createElement('td');
+    countCell.textContent = String(countProductsInGroup(groupName));
+
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions-cell';
+
+    const actions = document.createElement('div');
+    actions.className = 'table-action-buttons';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'edit-btn';
+    editBtn.title = 'Sửa nhóm';
+    editBtn.setAttribute('aria-label', 'Sửa nhóm');
+    editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+    editBtn.addEventListener('click', () => editProductGroup(groupName));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.title = 'Xóa nhóm';
+    deleteBtn.setAttribute('aria-label', 'Xóa nhóm');
+    deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+    deleteBtn.addEventListener('click', () => deleteProductGroup(groupName));
+
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    actionsCell.appendChild(actions);
+    row.appendChild(indexCell);
+    row.appendChild(nameCell);
+    row.appendChild(countCell);
+    row.appendChild(actionsCell);
     tbody.appendChild(row);
   });
 }

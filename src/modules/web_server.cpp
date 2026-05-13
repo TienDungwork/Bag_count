@@ -628,6 +628,7 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
         handleWebCommand(3); // Gọi chung logic với IR command
       } else if (cmd == "reset_count_only") {
         Serial.println("Reset count only command received");
+        clearCountStateFile();
         // CHỈ RESET COUNT, KHÔNG THAY ĐỔI TRẠNG THÁI KHÁC
         totalCount = 0;
         isLimitReached = false;

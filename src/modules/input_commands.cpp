@@ -81,6 +81,7 @@ void handleIRCommand(int button) {
     case 3: // Reset
       Serial.println("IR Remote: RESET");
       clearQrProductMismatch("IR reset");
+      clearCountStateFile();
       totalCount = 0;
       isLimitReached = false;
       isRunning = false;
@@ -293,6 +294,7 @@ void handleWebCommand(int button) {
       
     case 3: // Reset
       clearQrProductMismatch("Web reset");
+      clearCountStateFile();
       totalCount = 0;
       isLimitReached = false;
       isRunning = false;

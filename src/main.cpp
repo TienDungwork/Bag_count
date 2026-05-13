@@ -121,6 +121,7 @@ void setup() {
   isLimitReached = false;
   totalCount = 0;
   loadCurrentOrderForDisplay(); // Restore saved progress from /orders.json after an unexpected reboot.
+  restoreCountStateFromFile();  // Restore saved in-progress count after power loss, but keep paused.
   
   // BƯỚC 5: Khởi tạo LED Matrix display TRƯỚC network
   Serial.println("Initializing LED Matrix display...");

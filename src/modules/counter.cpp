@@ -362,6 +362,7 @@ void updateCount(int bagCount) {
     
     // Lưu ordersData sau khi cập nhật executeCount
     saveOrdersToFile();
+    saveCountStateToFile();
     
     // MQTT: Publish count update ngay lập tức
     publishCountUpdate();
@@ -515,6 +516,7 @@ void updateCount(int bagCount) {
       // THÊM CHECK: Chỉ auto reset khi thực sự hoàn thành đơn hàng (target > 0 và đã đếm xong)
       if (autoReset && totalCount >= targetCount && targetCount > 0 && totalCount > 0) {
         Serial.println("Auto Reset enabled - resetting CURRENT ORDER only");
+        clearCountStateFile();
         
         // HIỂN THỊ SỐ ĐẾM CUỐI TRƯỚC KHI RESET
         Serial.println("Displaying final count " + String(totalCount) + " before switching order...");
@@ -787,6 +789,7 @@ void updateCount(int bagCount) {
                     (foundNextOrder ? "SP-" + productCode : "Hết đơn hàng"));
       } else {
         Serial.println("Auto Reset disabled - attempting manual order switch");
+        clearCountStateFile();
         
         // Manual order switching logic khi autoReset = false
         String completedOrderType = bagType;

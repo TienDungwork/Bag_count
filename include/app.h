@@ -76,6 +76,8 @@ struct decode_results;
 
 #define BAGTYPES_FILE "/bagtypes.json"
 #define BAGCONFIGS_FILE "/bagconfigs.json"
+#define COUNT_STATE_FILE "/count_state.json"
+#define COUNT_STATE_TMP_FILE "/count_state.tmp"
 
 #ifndef SERIAL_MONITOR_BAUD
 #define SERIAL_MONITOR_BAUD 115200
@@ -510,6 +512,9 @@ void saveProductsToFile();
 void loadProductsFromFile();
 void saveOrdersToFile();
 void loadOrdersFromFile();
+void saveCountStateToFile();
+bool restoreCountStateFromFile();
+void clearCountStateFile();
 void trimHistoryArrayToLimit(JsonArray historyArray);
 void addNewProduct(String code, String name);
 void deleteProduct(int productId);
