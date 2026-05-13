@@ -1825,6 +1825,17 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     Serial.println("  Username: " + mqtt2_username);
     Serial.println("  KeyLogin: " + String(mqtt2_password.length() > 0 ? "[SET]" : "[EMPTY]"));
 
+    IPAddress brokerIp;
+    bool brokerIsIp = brokerIp.fromString(mqtt_server2);
+    WiFiClient tcpProbeClient;
+    tcpProbeClient.setTimeout(5);
+    bool tcpProbeConnected = brokerIsIp
+      ? tcpProbeClient.connect(brokerIp, mqtt_port2)
+      : tcpProbeClient.connect(mqtt_server2.c_str(), mqtt_port2);
+    Serial.println("MQTT2 TCP probe to " + mqtt_server2 + ":" + String(mqtt_port2) +
+                   " => " + String(tcpProbeConnected ? "OK" : "FAILED"));
+    tcpProbeClient.stop();
+
     if (mqtt2.connected()) {
       Serial.println("MQTT2 was connected, disconnecting before reconnect...");
       mqtt2.disconnect();
@@ -1842,6 +1853,13 @@ server.on("/webfonts/fa-solid-900.ttf", HTTP_GET, [](){
     response["message"] = connected ? "MQTT2 connected successfully" : "MQTT2 connection failed";
     response["connected"] = connected;
     response["state"] = mqtt2.state();
+    response["tcpProbeConnected"] = tcpProbeConnected;
+    response["networkMode"] = currentNetworkMode == ETHERNET_MODE ? "Ethernet" :
+                              (currentNetworkMode == WIFI_STA_MODE ? "WiFi STA" : "WiFi AP");
+    response["deviceIp"] = currentNetworkMode == ETHERNET_MODE ? ETH.localIP().toString() :
+                           (currentNetworkMode == WIFI_STA_MODE ? WiFi.localIP().toString() : WiFi.softAPIP().toString());
+    response["gateway"] = currentNetworkMode == ETHERNET_MODE ? ETH.gatewayIP().toString() :
+                          (currentNetworkMode == WIFI_STA_MODE ? WiFi.gatewayIP().toString() : "");
 
     String out;
     serializeJson(response, out);

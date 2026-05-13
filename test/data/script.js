@@ -6266,13 +6266,21 @@ async function connectMQTT2() {
       if (result.connected) {
         showNotification('Kết nối MQTT2 thành công!', 'success');
       } else {
-        showNotification(result.message || `MQTT2 chưa kết nối (state=${result.state})`, 'error');
+        let message = result.message || `MQTT2 chưa kết nối (state=${result.state})`;
+        if (result.tcpProbeConnected === false) {
+          message = `Không mở được TCP tới MQTT broker. ${result.networkMode || ''} IP=${result.deviceIp || '-'} Gateway=${result.gateway || '-'}`;
+        }
+        showNotification(message, 'error');
       }
     } else {
       let message = 'Kết nối MQTT2 thất bại';
       try {
         const result = await response.json();
-        if (result.message) message = result.message;
+        if (result.tcpProbeConnected === false) {
+          message = `Không mở được TCP tới MQTT broker. ${result.networkMode || ''} IP=${result.deviceIp || '-'} Gateway=${result.gateway || '-'}`;
+        } else if (result.message) {
+          message = result.message;
+        }
         if (result.state !== undefined) message += ` (state=${result.state})`;
         updateMQTT2Status(result.connected);
       } catch (parseError) {

@@ -298,7 +298,14 @@ void setupMQTT2() {
   
   Serial.println("Setting up MQTT Client 2 (Server anh Dũng)...");
   
-  mqtt2.setServer(mqtt_server2.c_str(), mqtt_port2);
+  IPAddress mqtt2BrokerIp;
+  if (mqtt2BrokerIp.fromString(mqtt_server2)) {
+    Serial.println("MQTT2 broker parsed as IP address: " + mqtt2BrokerIp.toString());
+    mqtt2.setServer(mqtt2BrokerIp, mqtt_port2);
+  } else {
+    Serial.println("MQTT2 broker using hostname: " + mqtt_server2);
+    mqtt2.setServer(mqtt_server2.c_str(), mqtt_port2);
+  }
   mqtt2.setCallback(onMqttMessage2);
   mqtt2.setBufferSize(2048);
   mqtt2.setKeepAlive(60);
