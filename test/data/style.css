@@ -3070,7 +3070,7 @@ input[type="checkbox"] {
 
 .products-section .form-row {
   display: grid;
-  grid-template-columns: minmax(560px, 1fr) 120px 160px 90px;
+  grid-template-columns: minmax(520px, 1fr) 120px 210px 90px;
   gap: 18px;
   align-items: end;
 }
@@ -3084,6 +3084,10 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+.products-section label {
+  white-space: nowrap;
+}
+
 .products-section .quantity,
 .products-section .warningQuantity {
   text-align: center;
@@ -3091,7 +3095,7 @@ input[type="checkbox"] {
 
 @media (max-width: 1100px) {
   .products-section .form-row {
-    grid-template-columns: minmax(360px, 1fr) 110px 140px 78px;
+    grid-template-columns: minmax(320px, 1fr) 110px 190px 78px;
   }
 }
 
