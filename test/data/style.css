@@ -3068,6 +3068,39 @@ input[type="checkbox"] {
   min-width: 200px;
 }
 
+.products-section .form-row {
+  display: grid;
+  grid-template-columns: minmax(560px, 1fr) 120px 160px 90px;
+  gap: 18px;
+  align-items: end;
+}
+
+.products-section .form-row .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.products-section .productSelect {
+  min-width: 0;
+}
+
+.products-section .quantity,
+.products-section .warningQuantity {
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .products-section .form-row {
+    grid-template-columns: minmax(360px, 1fr) 110px 140px 78px;
+  }
+}
+
+@media (max-width: 768px) {
+  .products-section .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Edit Button Styles */
 .edit-btn {
   background: #28a745;
