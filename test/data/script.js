@@ -3974,13 +3974,15 @@ function updateProductTable() {
       <td>${product.code}</td>
       <td>${product.name}</td>
       <td>${product.unitWeight || 0} kg</td>
-      <td>
-        <button class="edit-btn" onclick="editProduct(${productIdArg})">
+      <td class="actions-cell">
+        <div class="table-action-buttons">
+        <button type="button" class="edit-btn" onclick="editProduct(${productIdArg})" title="Sửa sản phẩm" aria-label="Sửa sản phẩm">
           <i class="fas fa-edit"></i>
         </button>
-        <button class="btn-danger" onclick="deleteProduct(${productIdArg})">
+        <button type="button" class="delete-btn" onclick="deleteProduct(${productIdArg})" title="Xóa sản phẩm" aria-label="Xóa sản phẩm">
           <i class="fas fa-trash"></i>
         </button>
+        </div>
       </td>
     `;
     tbody.appendChild(row);
