@@ -3084,6 +3084,47 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+.product-picker-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.product-picker-field .productSearchInput,
+.product-picker-field .productSelect {
+  width: 100%;
+}
+
+.product-picker-field .productSelectOpen {
+  height: auto;
+  min-height: 118px;
+}
+
+.product-picker-footer {
+  display: grid;
+  grid-template-columns: 34px minmax(120px, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.product-picker-page-info {
+  color: #6c757d;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.product-picker-page-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 30px;
+  padding: 0;
+  border-width: 1px;
+  border-radius: 4px;
+}
+
 .products-section label {
   white-space: nowrap;
 }

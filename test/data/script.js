@@ -1922,12 +1922,18 @@ function clearAllFormFields() {
   
   // Clear product fields using class selectors (multiple product form)
   const productSelects = document.querySelectorAll('.productSelect');
+  const productSearchInputs = document.querySelectorAll('.productSearchInput');
   const quantities = document.querySelectorAll('.quantity');
   const warnings = document.querySelectorAll('.warningQuantity');
   
-  productSelects.forEach(select => select.value = '');
+  productSelects.forEach(select => {
+    select.value = '';
+    select.dataset.selectedValue = '';
+  });
+  productSearchInputs.forEach(input => input.value = '');
   quantities.forEach(input => input.value = '');
   warnings.forEach(input => input.value = '');
+  renderAllProductPickers();
   
   console.log('All form fields cleared');
 }
@@ -2029,11 +2035,13 @@ function loadBatch(options = {}) {
           );
 
           if (selectEl) {
-            selectEl.value = matchedProduct ? matchedProduct.id : '';
+            setProductItemSelectedValue(item, matchedProduct ? matchedProduct.id : '');
           }
+          updateProductItemSearchLabel(item, matchedProduct);
           if (quantityEl) quantityEl.value = order.quantity || '';
           if (warningEl) warningEl.value = order.warningQuantity || '';
         });
+        renderAllProductPickers();
 
         console.log('Auto-filled multi-product form from batch orders:', batch.orders.length, 'items');
       } else {
@@ -2147,12 +2155,18 @@ function addOrderToBatch() {
   document.getElementById('orderCode').value = '';
   // Reset product selection
   const productSelects = document.querySelectorAll('.productSelect');
+  const productSearchInputs = document.querySelectorAll('.productSearchInput');
   const quantities = document.querySelectorAll('.quantity');
   const warnings = document.querySelectorAll('.warningQuantity');
   
-  productSelects.forEach(select => select.value = '');
+  productSelects.forEach(select => {
+    select.value = '';
+    select.dataset.selectedValue = '';
+  });
+  productSearchInputs.forEach(input => input.value = '');
   quantities.forEach(input => input.value = '');
   warnings.forEach(input => input.value = '');
+  renderAllProductPickers();
   
   showNotification('Thêm đơn hàng vào danh sách thành công và gửi đến thiết bị', 'success');
 }
@@ -4024,25 +4038,7 @@ function updateAllProductSelects() {
   // Cập nhật tất cả dropdown trong form multi-order
   const allProductSelects = document.querySelectorAll('.productSelect');
   console.log('DEBUG: Updating', allProductSelects.length, 'multi-order selects');
-  
-  allProductSelects.forEach((select, index) => {
-    const currentValue = select.value;
-    select.innerHTML = '<option value="">Chọn sản phẩm</option>';
-    
-    currentProducts.forEach(product => {
-      const option = document.createElement('option');
-      option.value = product.id; // Sửa từ product.name thành product.id
-      option.textContent = getProductDisplayText(product);
-      select.appendChild(option);
-    });
-    
-    // Khôi phục giá trị đã chọn nếu có
-    if (currentValue) {
-      select.value = currentValue;
-    }
-    
-    console.log(`DEBUG: Select ${index} updated with ${currentProducts.length} products, current value:`, currentValue);
-  });
+  renderAllProductPickers();
 }
 
 // Debug function to check data
@@ -4662,7 +4658,7 @@ function loadProducts() {
     console.log('Updated productIdCounter:', productIdCounter);
   }
   loadProductGroups();
-  updateProductSelect();
+  updateAllProductSelects();
 }
 
 function saveProducts() {
@@ -5928,7 +5924,7 @@ function deleteProduct(id) {
     
     updateProductGroupTable();
     updateProductTable();
-    updateProductSelect();
+    updateAllProductSelects();
     showNotification('Xóa sản phẩm thành công', 'success');
   }
 }
@@ -7805,23 +7801,51 @@ function showTabInternal(tabName) {
 // ==================== MULTIPLE PRODUCTS FORM ====================
 
 let productItemCounter = 0;
+const PRODUCT_PICKER_PAGE_SIZE = 5;
 
-function addProductItem() {
-  productItemCounter++;
-  const productsList = document.getElementById('productsList');
-  
-  const productItem = document.createElement('div');
-  productItem.className = 'product-item';
-  productItem.dataset.index = productItemCounter;
-  
-  // Tạo select element và populate sau khi đã tạo
-  productItem.innerHTML = `
+function getProductPickerApi() {
+  return window.ProductPicker || {
+    getSelectedProductIds: (selects, currentValue) => {
+      const selectedIds = new Set();
+      const currentId = String(currentValue || '');
+      Array.from(selects || []).forEach(select => {
+        const value = String(select && select.value ? select.value : '');
+        if (value && value !== currentId) selectedIds.add(value);
+      });
+      return selectedIds;
+    },
+    getProductPickerPage: ({ products, pageSize }) => ({
+      items: Array.isArray(products) ? products.slice(0, pageSize || PRODUCT_PICKER_PAGE_SIZE) : [],
+      page: 1,
+      totalPages: 1,
+      totalItems: Array.isArray(products) ? products.length : 0
+    })
+  };
+}
+
+function createProductItemMarkup(index) {
+  return `
     <div class="form-row">
-      <div class="form-group">
-        <label>Tên mặt hàng:</label>
-        <select class="productSelect" required>
+      <div class="form-group product-picker-field">
+        <label>Tên sản phẩm:</label>
+        <input type="text"
+               class="productSearchInput"
+               placeholder="Nhập tên hoặc mã sản phẩm"
+               autocomplete="off"
+               oninput="handleProductSearchInput(${index})"
+               onfocus="handleProductSearchFocus(${index})">
+        <select class="productSelect" required onchange="handleProductSelection(${index})">
           <option value="">Chọn sản phẩm</option>
         </select>
+        <div class="product-picker-footer">
+          <button type="button" class="page-btn product-picker-page-btn prev-product-page" onclick="changeProductPickerPage(${index}, -1)" aria-label="Trang trước">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span class="product-picker-page-info">0 sản phẩm</span>
+          <button type="button" class="page-btn product-picker-page-btn next-product-page" onclick="changeProductPickerPage(${index}, 1)" aria-label="Trang sau">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
       </div>
       <div class="form-group">
         <label>Số lượng:</label>
@@ -7832,28 +7856,204 @@ function addProductItem() {
         <input type="number" class="warningQuantity" min="1">
       </div>
       <div class="form-group">
-        <button type="button" class="btn-danger btn-small" onclick="removeProductItem(${productItemCounter})" style="margin-top: 25px;">
+        <button type="button" class="btn-danger btn-small" onclick="removeProductItem(${index})" style="margin-top: 25px;">
           <i class="fas fa-trash"></i>
         </button>
       </div>
     </div>
   `;
+}
+
+function findProductItem(index) {
+  return document.querySelector(`.product-item[data-index="${index}"]`);
+}
+
+function getProductById(productId) {
+  return currentProducts.find(product => String(product.id) === String(productId));
+}
+
+function getProductItemSelectedValue(productItem) {
+  const select = productItem ? productItem.querySelector('.productSelect') : null;
+  return String(select && select.dataset.selectedValue ? select.dataset.selectedValue : '');
+}
+
+function setProductItemSelectedValue(productItem, productId) {
+  const select = productItem ? productItem.querySelector('.productSelect') : null;
+  if (!select) return;
+
+  select.dataset.selectedValue = productId ? String(productId) : '';
+}
+
+function updateProductItemSearchLabel(productItem, product) {
+  const searchInput = productItem ? productItem.querySelector('.productSearchInput') : null;
+  if (searchInput) {
+    searchInput.value = product ? getProductDisplayText(product) : '';
+  }
+}
+
+function renderProductPicker(index, requestedPage) {
+  const productItem = findProductItem(index);
+  if (!productItem) return;
+
+  const searchInput = productItem.querySelector('.productSearchInput');
+  const select = productItem.querySelector('.productSelect');
+  const pageInfo = productItem.querySelector('.product-picker-page-info');
+  const prevBtn = productItem.querySelector('.prev-product-page');
+  const nextBtn = productItem.querySelector('.next-product-page');
+  if (!select) return;
+
+  const isSearching = productItem.dataset.productSearching === '1';
+  let currentValue = getProductItemSelectedValue(productItem);
+  const currentProduct = currentValue ? getProductById(currentValue) : null;
+  if (currentValue && !currentProduct) {
+    currentValue = '';
+    setProductItemSelectedValue(productItem, '');
+  }
+  const page = requestedPage || parseInt(productItem.dataset.productPage || '1', 10) || 1;
+  const selectedIds = getProductPickerApi().getSelectedProductIds(
+    Array.from(document.querySelectorAll('.product-item')).map(item => ({
+      value: getProductItemSelectedValue(item)
+    })),
+    isSearching ? '' : currentValue
+  );
+  const pageData = getProductPickerApi().getProductPickerPage({
+    products: currentProducts,
+    query: searchInput ? searchInput.value : '',
+    selectedIds,
+    currentValue: isSearching ? '' : currentValue,
+    page,
+    pageSize: PRODUCT_PICKER_PAGE_SIZE,
+    getDisplayText: getProductDisplayText
+  });
+  const optionIds = new Set();
+
+  productItem.dataset.productPage = String(pageData.page);
+  select.innerHTML = '';
+
+  if (!currentValue || isSearching) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Chọn sản phẩm';
+    select.appendChild(placeholder);
+  } else if (currentProduct && !pageData.items.some(product => String(product.id) === String(currentValue))) {
+    const selectedOption = document.createElement('option');
+    selectedOption.value = currentProduct.id;
+    selectedOption.textContent = getProductDisplayText(currentProduct);
+    select.appendChild(selectedOption);
+    optionIds.add(String(currentProduct.id));
+  }
+
+  pageData.items.forEach(product => {
+    const productId = String(product.id);
+    if (optionIds.has(productId)) return;
+
+    const option = document.createElement('option');
+    option.value = product.id;
+    option.textContent = getProductDisplayText(product);
+    select.appendChild(option);
+    optionIds.add(productId);
+  });
+
+  if (pageData.totalItems === 0) {
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = 'Không tìm thấy sản phẩm';
+    emptyOption.disabled = true;
+    select.appendChild(emptyOption);
+  }
+
+  if (currentValue && !isSearching) {
+    select.value = currentValue;
+  }
+
+  const showPager = isSearching && pageData.totalItems > 0;
+  const footer = productItem.querySelector('.product-picker-footer');
+  if (footer) {
+    footer.style.display = showPager ? 'grid' : 'none';
+  }
+  if (pageInfo) {
+    pageInfo.textContent = `${pageData.page}/${pageData.totalPages} (${pageData.totalItems} sản phẩm)`;
+  }
+  if (prevBtn) prevBtn.disabled = pageData.page <= 1;
+  if (nextBtn) nextBtn.disabled = pageData.page >= pageData.totalPages;
+}
+
+function openProductPickerSelect(productItem) {
+  const select = productItem ? productItem.querySelector('.productSelect') : null;
+  if (!select) return;
+
+  const optionCount = Array.from(select.options).filter(option => !option.disabled).length;
+  select.size = Math.min(PRODUCT_PICKER_PAGE_SIZE, Math.max(2, optionCount));
+  select.classList.add('productSelectOpen');
+}
+
+function closeProductPickerSelect(productItem) {
+  const select = productItem ? productItem.querySelector('.productSelect') : null;
+  if (!select) return;
+
+  select.size = 1;
+  select.classList.remove('productSelectOpen');
+}
+
+function renderAllProductPickers() {
+  document.querySelectorAll('.product-item').forEach(productItem => {
+    productItem.dataset.productSearching = '0';
+    renderProductPicker(productItem.dataset.index);
+  });
+}
+
+function handleProductSearchFocus(index) {
+  const productItem = findProductItem(index);
+  const searchInput = productItem ? productItem.querySelector('.productSearchInput') : null;
+  if (searchInput && getProductItemSelectedValue(productItem)) {
+    searchInput.select();
+  }
+  renderProductPicker(index);
+}
+
+function handleProductSearchInput(index) {
+  const productItem = findProductItem(index);
+  if (productItem) {
+    productItem.dataset.productPage = '1';
+    productItem.dataset.productSearching = '1';
+  }
+  renderProductPicker(index, 1);
+  openProductPickerSelect(productItem);
+}
+
+function changeProductPickerPage(index, direction) {
+  const productItem = findProductItem(index);
+  if (!productItem) return;
+
+  const currentPage = parseInt(productItem.dataset.productPage || '1', 10) || 1;
+  renderProductPicker(index, currentPage + direction);
+}
+
+function handleProductSelection(index) {
+  const productItem = findProductItem(index);
+  if (!productItem) return;
+
+  const select = productItem.querySelector('.productSelect');
+  const selectedValue = select ? select.value : '';
+  setProductItemSelectedValue(productItem, selectedValue);
+  productItem.dataset.productSearching = '0';
+  updateProductItemSearchLabel(productItem, getProductById(selectedValue));
+  closeProductPickerSelect(productItem);
+  renderAllProductPickers();
+}
+
+function addProductItem() {
+  productItemCounter++;
+  const productsList = document.getElementById('productsList');
+  
+  const productItem = document.createElement('div');
+  productItem.className = 'product-item';
+  productItem.dataset.index = productItemCounter;
+  
+  productItem.innerHTML = createProductItemMarkup(productItemCounter);
   
   productsList.appendChild(productItem);
-  
-  // Populate select với currentProducts sau khi element đã được thêm vào DOM
-  const select = productItem.querySelector('.productSelect');
-  if (select && currentProducts && currentProducts.length > 0) {
-    currentProducts.forEach(product => {
-      const option = document.createElement('option');
-      option.value = product.id;
-      option.textContent = getProductDisplayText(product);
-      select.appendChild(option);
-    });
-    console.log('✅ DEBUG: Populated select with', currentProducts.length, 'products');
-  } else {
-    console.warn('⚠️ DEBUG: No currentProducts available when creating select');
-  }
+  renderProductPicker(productItemCounter);
 }
 
 function removeProductItem(index) {
@@ -7865,6 +8065,8 @@ function removeProductItem(index) {
   // If no items left, add one
   if (document.querySelectorAll('.product-item').length === 0) {
     addInitialProductItem();
+  } else {
+    renderAllProductPickers();
   }
 }
 
@@ -7872,43 +8074,10 @@ function addInitialProductItem() {
   const productsList = document.getElementById('productsList');
   productsList.innerHTML = `
     <div class="product-item" data-index="0">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Tên mặt hàng:</label>
-          <select class="productSelect" required>
-            <option value="">Chọn sản phẩm</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Số lượng:</label>
-          <input type="number" class="quantity" min="1" required>
-        </div>
-        <div class="form-group">
-          <label>Cảnh báo gần xong:</label>
-          <input type="number" class="warningQuantity" min="1">
-        </div>
-        <div class="form-group">
-          <button type="button" class="btn-danger btn-small" onclick="removeProductItem(0)" style="margin-top: 25px;">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      </div>
+      ${createProductItemMarkup(0)}
     </div>
   `;
-  
-  // Populate select với currentProducts sau khi element đã được tạo
-  const select = productsList.querySelector('.productSelect');
-  if (select && currentProducts && currentProducts.length > 0) {
-    currentProducts.forEach(product => {
-      const option = document.createElement('option');
-      option.value = product.id;
-      option.textContent = getProductDisplayText(product);
-      select.appendChild(option);
-    });
-    console.log('✅ DEBUG: Populated initial select with', currentProducts.length, 'products');
-  } else {
-    console.warn('⚠️ DEBUG: No currentProducts available when creating initial select');
-  }
+  renderProductPicker(0);
 }
 
 function addMultipleOrdersToBatch() {
@@ -7926,22 +8095,23 @@ function addMultipleOrdersToBatch() {
   
   for (let item of productItems) {
     const productSelect = item.querySelector('.productSelect');
+    const selectedProductId = getProductItemSelectedValue(item) || (productSelect ? productSelect.value : '');
     const quantity = item.querySelector('.quantity');
     const warningQuantity = item.querySelector('.warningQuantity');
     
     console.log('🔍 DEBUG: Processing product item:');
-    console.log('   productSelect.value:', productSelect.value);
+    console.log('   productSelect.value:', selectedProductId);
     console.log('   quantity.value:', quantity.value);
     console.log('   currentProducts:', currentProducts);
     
-    if (productSelect.value && quantity.value) {
+    if (selectedProductId && quantity.value) {
       // Tìm product object hoàn chỉnh theo ID
-      const product = currentProducts.find(p => p.id == productSelect.value);
+      const product = currentProducts.find(p => p.id == selectedProductId);
       console.log('DEBUG: Found product:', product);
       
       if (!product) {
-        console.error('DEBUG: Product not found for ID:', productSelect.value);
-        showNotification(`Không tìm thấy sản phẩm với ID: ${productSelect.value}`, 'error');
+        console.error('DEBUG: Product not found for ID:', selectedProductId);
+        showNotification(`Không tìm thấy sản phẩm với ID: ${selectedProductId}`, 'error');
         continue;
       }
       
