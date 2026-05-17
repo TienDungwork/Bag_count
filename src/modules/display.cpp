@@ -476,17 +476,57 @@ static String ledAsciiText(const String& text) {
 static const int LED_PRODUCT_VISIBLE_CHARS = 9;
 static const int LED_PRODUCT_SCROLL_GAP_CHARS = 3;
 static const unsigned long LED_PRODUCT_SCROLL_STEP_MS = 350;
-static const unsigned long LED_PRODUCT_TOGGLE_MS = 5000;
+static const unsigned long LED_PRODUCT_HOLD_AFTER_CYCLE_MS = 5000;
 static const unsigned long LED_TARGET_TOGGLE_MS = 3000;
 
-static String currentLedProductText(bool& noOrder) {
+static bool ledProductShowingName = false;
+static bool ledProductWaitingAfterCycle = false;
+static unsigned long ledProductCycleFinishedMs = 0;
+static String ledProductLastCode = "";
+static String ledProductLastName = "";
+
+static bool canAlternateLedProductText() {
+  return hasDisplayValue(productCode) && hasDisplayValue(bagType) && bagType != "MA SP";
+}
+
+static void resetLedProductTextCycleIfNeeded() {
+  String currentCode = hasDisplayValue(productCode) ? productCode : "";
+  String currentName = (hasDisplayValue(bagType) && bagType != "MA SP") ? bagType : "";
+
+  if (currentCode == ledProductLastCode && currentName == ledProductLastName) {
+    return;
+  }
+
+  ledProductLastCode = currentCode;
+  ledProductLastName = currentName;
+  ledProductShowingName = false;
+  ledProductWaitingAfterCycle = false;
+  ledProductCycleFinishedMs = 0;
+}
+
+static void markLedProductCycleComplete() {
+  if (!canAlternateLedProductText() || ledProductWaitingAfterCycle) {
+    return;
+  }
+
+  ledProductWaitingAfterCycle = true;
+  ledProductCycleFinishedMs = millis();
+}
+
+static String currentLedProductText(bool& noOrder, bool advanceCycle = false) {
   String displayText;
   noOrder = false;
+  resetLedProductTextCycleIfNeeded();
+
+  if (advanceCycle && ledProductWaitingAfterCycle &&
+      millis() - ledProductCycleFinishedMs >= LED_PRODUCT_HOLD_AFTER_CYCLE_MS) {
+    ledProductShowingName = !ledProductShowingName;
+    ledProductWaitingAfterCycle = false;
+  }
 
   if (hasDisplayValue(productCode)) {
     bool hasName = hasDisplayValue(bagType) && bagType != "MA SP";
-    bool showName = hasName && ((millis() / LED_PRODUCT_TOGGLE_MS) % 2) == 1;
-    displayText = showName ? bagType : productCode;
+    displayText = (hasName && ledProductShowingName) ? bagType : productCode;
   } else if (hasDisplayValue(bagType) && bagType != "MA SP") {
     displayText = bagType;
   } else {
@@ -497,14 +537,24 @@ static String currentLedProductText(bool& noOrder) {
   return noOrder ? displayText : ledAsciiText(displayText);
 }
 
-static String scrollingWindowText(const String& text) {
+static String scrollingWindowText(const String& text, bool& cycleComplete, bool pauseScroll = false) {
   static String lastText = "";
   static int scrollOffset = 0;
   static unsigned long lastStepMs = 0;
+  static bool shortTextCycleReported = false;
+
+  cycleComplete = false;
 
   int charCount = utf8CharCount(text);
   if (charCount <= LED_PRODUCT_VISIBLE_CHARS) {
-    lastText = text;
+    if (text != lastText) {
+      lastText = text;
+      shortTextCycleReported = false;
+    }
+    if (!shortTextCycleReported) {
+      cycleComplete = true;
+      shortTextCycleReported = true;
+    }
     scrollOffset = 0;
     lastStepMs = millis();
     return text;
@@ -514,13 +564,15 @@ static String scrollingWindowText(const String& text) {
     lastText = text;
     scrollOffset = 0;
     lastStepMs = millis();
+    shortTextCycleReported = false;
   }
 
   unsigned long now = millis();
-  if (now - lastStepMs >= LED_PRODUCT_SCROLL_STEP_MS) {
+  if (!pauseScroll && now - lastStepMs >= LED_PRODUCT_SCROLL_STEP_MS) {
     lastStepMs = now;
     int cycleChars = charCount + LED_PRODUCT_SCROLL_GAP_CHARS;
     scrollOffset = (scrollOffset + 1) % cycleChars;
+    cycleComplete = scrollOffset == 0;
   }
 
   String padded = text;
@@ -614,6 +666,7 @@ static void drawSevenSegmentNumberRight(int rightX, int y, const String& number,
 
 bool displayNeedsFastRefresh() {
   if (!systemConnected || showNetworkIp || isLimitReached) return false;
+  if (ledProductWaitingAfterCycle) return false;
 
   bool noOrder = false;
   String displayText = currentLedProductText(noOrder);
@@ -657,12 +710,16 @@ void updateDisplay() {
   // └─────────────────────┴──────────────┘
   
   bool noOrder = false;
-  String displayText = currentLedProductText(noOrder);
+  String displayText = currentLedProductText(noOrder, true);
 
   if (noOrder) {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
-    drawVietnameseText(1, 5, scrollingWindowText(displayText), myYELLOW, 1.0f);
+    bool productCycleComplete = false;
+    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 1.0f);
+    if (productCycleComplete) {
+      markLedProductCycleComplete();
+    }
   }
 
   // SỐ ĐẾM LỚN BÊN PHẢI: kiểu LED 7 đoạn, đủ chỗ cho 4 chữ số.
