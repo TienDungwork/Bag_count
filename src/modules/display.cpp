@@ -716,7 +716,7 @@ void updateDisplay() {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
     bool productCycleComplete = false;
-    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 1.1f);
+    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 1.4f);
     if (productCycleComplete) {
       markLedProductCycleComplete();
     }
