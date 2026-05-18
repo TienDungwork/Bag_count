@@ -481,7 +481,7 @@ static String ledAsciiText(const String& text) {
   return out;
 }
 
-static const int LED_PRODUCT_VISIBLE_CHARS = 5;
+static const int LED_PRODUCT_VISIBLE_CHARS = 6;
 static const int LED_PRODUCT_SCROLL_GAP_CHARS = 3;
 static const unsigned long LED_PRODUCT_SCROLL_STEP_MS = 350;
 static const unsigned long LED_PRODUCT_HOLD_AFTER_CYCLE_MS = 5000;
