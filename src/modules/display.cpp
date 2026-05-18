@@ -720,7 +720,7 @@ void updateDisplay() {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
     bool productCycleComplete = false;
-    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 2.0f);
+    drawVietnameseText(1, 0, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 2.0f);
     if (productCycleComplete) {
       markLedProductCycleComplete();
     }
