@@ -104,19 +104,19 @@ static bool glyphColumns(char c, uint8_t out[5]) {
   return false;
 }
 
-static int scale15(int value) {
-  return (value * 3) / 2;
+static int scaleTextCoord(int value, float scale) {
+  return (int)(value * scale + 0.5f);
 }
 
-static void drawScaledPixel15(int x, int y, int srcX, int srcY, uint16_t color) {
-  int x0 = x + scale15(srcX);
-  int x1 = x + scale15(srcX + 1);
-  int y0 = y + scale15(srcY);
-  int y1 = y + scale15(srcY + 1);
+static void drawScaledPixel(int x, int y, int srcX, int srcY, uint16_t color, float scale) {
+  int x0 = x + scaleTextCoord(srcX, scale);
+  int x1 = x + scaleTextCoord(srcX + 1, scale);
+  int y0 = y + scaleTextCoord(srcY, scale);
+  int y1 = y + scaleTextCoord(srcY + 1, scale);
   dma_display->fillRect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0), color);
 }
 
-static void drawScaledAsciiChar15(int x, int y, char c, uint16_t color) {
+static void drawScaledAsciiChar(int x, int y, char c, uint16_t color, float scale) {
   uint8_t columns[5];
   if (!glyphColumns(c, columns)) {
     dma_display->setTextSize(1);
@@ -130,58 +130,58 @@ static void drawScaledAsciiChar15(int x, int y, char c, uint16_t color) {
     uint8_t line = columns[col];
     for (int row = 0; row < 8; row++, line >>= 1) {
       if (line & 1) {
-        drawScaledPixel15(x, y, col, row, color);
+        drawScaledPixel(x, y, col, row, color, scale);
       }
     }
   }
 }
 
-static void drawAccentMark15(int x, int y, char mark, uint16_t color) {
+static void drawAccentMarkScaled(int x, int y, char mark, uint16_t color, float scale) {
   if (!dma_display || mark == 0) return;
 
   switch (mark) {
     case '\'':
-      drawScaledPixel15(x, y, 4, 1, color);
-      drawScaledPixel15(x, y, 3, 2, color);
+      drawScaledPixel(x, y, 4, 1, color, scale);
+      drawScaledPixel(x, y, 3, 2, color, scale);
       break;
     case '`':
-      drawScaledPixel15(x, y, 2, 0, color);
-      drawScaledPixel15(x, y, 3, 1, color);
+      drawScaledPixel(x, y, 2, 0, color, scale);
+      drawScaledPixel(x, y, 3, 1, color, scale);
       break;
     case '?':
-      drawScaledPixel15(x, y, 2, 0, color);
-      drawScaledPixel15(x, y, 3, 0, color);
-      drawScaledPixel15(x, y, 3, 1, color);
-      drawScaledPixel15(x, y, 2, 2, color);
+      drawScaledPixel(x, y, 2, 0, color, scale);
+      drawScaledPixel(x, y, 3, 0, color, scale);
+      drawScaledPixel(x, y, 3, 1, color, scale);
+      drawScaledPixel(x, y, 2, 2, color, scale);
       break;
     case '~':
-      drawScaledPixel15(x, y, 1, 1, color);
-      drawScaledPixel15(x, y, 2, 0, color);
-      drawScaledPixel15(x, y, 3, 1, color);
-      drawScaledPixel15(x, y, 4, 0, color);
+      drawScaledPixel(x, y, 1, 1, color, scale);
+      drawScaledPixel(x, y, 2, 0, color, scale);
+      drawScaledPixel(x, y, 3, 1, color, scale);
+      drawScaledPixel(x, y, 4, 0, color, scale);
       break;
   }
 }
 
-static void drawShapeMark15(int x, int y, char mark, uint16_t color) {
+static void drawShapeMarkScaled(int x, int y, char mark, uint16_t color, float scale) {
   if (!dma_display || mark == 0) return;
 
   switch (mark) {
     case '^':
-      drawScaledPixel15(x, y, 1, 2, color);
-      drawScaledPixel15(x, y, 2, 1, color);
-      drawScaledPixel15(x, y, 3, 1, color);
-      drawScaledPixel15(x, y, 4, 2, color);
+      drawScaledPixel(x, y, 1, 2, color, scale);
+      drawScaledPixel(x, y, 2, 1, color, scale);
+      drawScaledPixel(x, y, 3, 1, color, scale);
+      drawScaledPixel(x, y, 4, 2, color, scale);
       break;
     case '(':
-      drawScaledPixel15(x, y, 1, 0, color);
-      drawScaledPixel15(x, y, 2, 1, color);
-      drawScaledPixel15(x, y, 3, 1, color);
-      drawScaledPixel15(x, y, 4, 0, color);
+      drawScaledPixel(x, y, 1, 0, color, scale);
+      drawScaledPixel(x, y, 2, 1, color, scale);
+      drawScaledPixel(x, y, 3, 1, color, scale);
+      drawScaledPixel(x, y, 4, 0, color, scale);
       break;
     case '+':
-      drawScaledPixel15(x, y, 4, 1, color);
-      drawScaledPixel15(x, y, 5, 0, color);
+      drawScaledPixel(x, y, 4, 1, color, scale);
+      drawScaledPixel(x, y, 5, 0, color, scale);
       break;
   }
 }
@@ -276,42 +276,46 @@ void drawVietnameseText(int x, int y, const String& text, uint16_t color, float 
 
   int cursorX = x;
   int i = 0;
-  bool scale15Text = textSize > 1.4f && textSize < 1.6f;
+  bool scaledText = textSize > 1.0f && textSize < 2.0f;
   int intTextSize = (int)textSize;
-  int charWidth = scale15Text ? 9 : 6 * intTextSize;
-  int topY = std::max(0, y - (scale15Text ? 6 : 4));
-  int shapeY = std::max(0, y - (scale15Text ? 3 : 2));
-  int dotY = y + (scale15Text ? 12 : 8 * intTextSize);
+  int charWidth = scaledText ? scaleTextCoord(6, textSize) : 6 * intTextSize;
+  int topY = std::max(0, y - (scaledText ? scaleTextCoord(4, textSize) : 4));
+  int shapeY = std::max(0, y - (scaledText ? scaleTextCoord(2, textSize) : 2));
+  int dotY = y + (scaledText ? scaleTextCoord(8, textSize) : 8 * intTextSize);
 
   dma_display->setTextSize(intTextSize);
   dma_display->setTextColor(color);
 
   while (i < (int)text.length()) {
     VietnameseGlyph glyph = glyphFromUtf8(text, i);
-    if (scale15Text) {
-      drawScaledAsciiChar15(cursorX, y, glyph.base, color);
+    if (scaledText) {
+      drawScaledAsciiChar(cursorX, y, glyph.base, color, textSize);
     } else {
       dma_display->setCursor(cursorX, y);
       dma_display->print(glyph.base);
     }
 
     if (glyph.stroke) {
-      if (scale15Text) {
-        dma_display->drawLine(cursorX + 2, y + 6, cursorX + 8, y + 3, color);
+      if (scaledText) {
+        dma_display->drawLine(cursorX + scaleTextCoord(1, textSize),
+                              y + scaleTextCoord(4, textSize),
+                              cursorX + scaleTextCoord(5, textSize),
+                              y + scaleTextCoord(2, textSize),
+                              color);
       } else {
         dma_display->drawLine(cursorX + 1, y + 4, cursorX + 5, y + 2, color);
       }
     }
-    if (scale15Text) {
-      drawShapeMark15(cursorX, shapeY, glyph.shapeMark, color);
-      drawAccentMark15(cursorX, topY, glyph.topMark, color);
+    if (scaledText) {
+      drawShapeMarkScaled(cursorX, shapeY, glyph.shapeMark, color, textSize);
+      drawAccentMarkScaled(cursorX, topY, glyph.topMark, color, textSize);
     } else {
       drawShapeMark(cursorX, shapeY, glyph.shapeMark, color);
       drawAccentMark(cursorX, topY, glyph.topMark, color);
     }
     if (glyph.dotBelow) {
-      if (scale15Text) {
-        drawScaledPixel15(cursorX, dotY, 3, 0, color);
+      if (scaledText) {
+        drawScaledPixel(cursorX, dotY, 3, 0, color, textSize);
       } else {
         dma_display->drawPixel(cursorX + 3, dotY, color);
       }
