@@ -716,7 +716,7 @@ void updateDisplay() {
     drawVietnameseText(1, 5, displayText, myYELLOW, 1.5f);
   } else {
     bool productCycleComplete = false;
-    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 1.0f);
+    drawVietnameseText(1, 5, scrollingWindowText(displayText, productCycleComplete, ledProductWaitingAfterCycle), myYELLOW, 1.1f);
     if (productCycleComplete) {
       markLedProductCycleComplete();
     }
@@ -735,7 +735,7 @@ void updateDisplay() {
     modeLabel = "NHAP";
   }
   bool showTarget = ((millis() / LED_TARGET_TOGGLE_MS) % 2) == 1;
-  drawVietnameseText(1, 16, showTarget ? String(targetCount) : modeLabel, myCYAN, 2.0f);
+  drawVietnameseText(1, 18, showTarget ? String(targetCount) : modeLabel, myCYAN, 2.0f);
   
   needUpdate = false;
 }
